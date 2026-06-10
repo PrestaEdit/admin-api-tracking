@@ -115,6 +115,44 @@ def reconcile(domains):
     return info, moved_merged, moved_closed
 
 
+def discover_unlisted_prs(domains, referenced):
+    """Catch OPEN ps_apiresources PRs the (periodically-regenerated, often-stale)
+    issue table hasn't captured yet: link each to the Missing rows whose CQRS command
+    class name appears in the PR diff, flipping them to In Progress with the real author."""
+    try:
+        open_prs = gh_json(["pr", "list", "--repo", REPO_API, "--state", "open",
+                            "--limit", "200", "--json", "number,author"])
+    except Exception as e:
+        sys.stderr.write(f"warn: pr list: {e}\n")
+        return []
+    missing_by_action = {}
+    for d in domains:
+        for r in d['rows']:
+            if r['status'] == 'missing':
+                missing_by_action.setdefault(r['action'], []).append(r)
+    linked = []
+    for pr in open_prs:
+        num = pr['number']
+        if num in referenced:
+            continue
+        author = (pr.get('author') or {}).get('login')
+        try:
+            diff = subprocess.run(["gh", "pr", "diff", str(num), "--repo", REPO_API],
+                                  capture_output=True, text=True, timeout=60).stdout
+        except Exception as e:
+            sys.stderr.write(f"warn: pr diff {num}: {e}\n")
+            continue
+        for action, rows in missing_by_action.items():
+            if re.search(r'\b' + re.escape(action) + r'\b', diff):
+                for r in rows:
+                    if r['status'] == 'missing':       # first PR to claim the row wins
+                        r['status'] = 'in_progress'
+                        r['pr'] = num
+                        r['author'] = r['assignee'] = author
+                        linked.append((num, action, author))
+    return linked
+
+
 def build(domains, generated_at, merged_note):
     domains.sort(key=lambda d: d['name'].lower())
     total = sum(len(d['rows']) for d in domains)
@@ -418,7 +456,9 @@ if(window.HSStaticMethods) window.HSStaticMethods.autoInit();
 def main():
     body = fetch_issue_body()
     domains = parse(body)
+    referenced = {r['pr'] for d in domains for r in d['rows'] if r['pr']}
     _info, merged, closed = reconcile(domains)
+    discovered = discover_unlisted_prs(domains, referenced)
     note = ""
     if merged:
         items = ", ".join(f"#{pr} ({dom} <code>{act}</code>)" for dom, act, pr in merged)
@@ -426,6 +466,10 @@ def main():
     if closed:
         note += " " + f"<b>Reverted to Missing (PR closed):</b> " + \
                 ", ".join(f"{dom} <code>{act}</code>" for dom, act in closed) + "."
+    if discovered:
+        prs = sorted({pr for pr, _, _ in discovered})
+        note += " " + f"<b>Discovered {len(prs)} open PR(s) not yet in the issue:</b> " + \
+                ", ".join(f"#{p}" for p in prs) + "."
     if not note:
         note = "No PR status changes since the source snapshot."
     stamp = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M %Z")
@@ -439,6 +483,8 @@ def main():
         print("  newly merged:", merged)
     if closed:
         print("  reverted (closed):", closed)
+    if discovered:
+        print("  discovered unlisted PRs:", discovered)
 
 
 if __name__ == "__main__":
