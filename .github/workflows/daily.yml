@@ -2,7 +2,7 @@ name: Refresh Admin API tracking
 
 on:
   schedule:
-    - cron: '0 7 * * *'      # 07:00 UTC = 09:00 Europe/Brussels
+    - cron: '0 * * * *'      # every hour, on the hour (UTC) — commits only when data changed
   workflow_dispatch: {}       # bouton "Run workflow" manuel
 
 permissions:
