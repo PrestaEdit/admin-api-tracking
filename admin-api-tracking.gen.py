@@ -7,8 +7,9 @@ Pipeline (no manual steps):
   2. Parse the per-domain markdown tables into structured rows.
   3. Collect every referenced ps_apiresources PR and query its live state via `gh`.
   4. Reconcile statuses:  PR merged -> Implemented,  PR closed (not merged) -> Missing,
-     PR still open -> In Progress.
-  5. Render a standalone, interactive HTML file (search / filters / sorts).
+     PR still open -> In Progress.  The verified PR author is attached to each row.
+  5. Render a standalone, interactive HTML file styled with Preline UI / Tailwind
+     (search / filters by status, type, domain, author / sorts).
 
 Requirements at runtime: python3 + an authenticated `gh` CLI.
 Usage: python3 admin-api-tracking.gen.py [output.html]
@@ -64,7 +65,8 @@ def parse(body):
                 continue
             seen.add(key)
             cur['rows'].append({'action': action, 'type': typ, 'status': status,
-                                'endpoint': endpoint, 'assignee': assignee, 'pr': pr})
+                                'endpoint': endpoint, 'assignee': assignee, 'pr': pr,
+                                'author': None})
     return domains
 
 
@@ -96,18 +98,19 @@ def reconcile(domains):
                 continue
             st, author = info.get(r['pr'], (None, None))
             if author:
-                r['assignee'] = author  # verified real PR creator (overrides issue listing)
+                r['assignee'] = author          # verified real PR creator (overrides issue listing)
+                r['author'] = author            # preserved for the author filter even after a transition
             if st == 'MERGED':
                 r['status'] = 'implemented'
                 r['merged_pr'] = r['pr']
-                r['assignee'] = None
+                # keep assignee/author to credit the contributor
                 if not r['endpoint']:
-                    r['endpoint'] = ''  # endpoint detail not auto-derived; PR link kept
+                    r['endpoint'] = ''          # endpoint detail not auto-derived; PR link kept
                 moved_merged.append((d['name'], r['action'], r['pr']))
             elif st == 'CLOSED':
                 r['status'] = 'missing'
                 r['endpoint'] = ''
-                r['assignee'] = r['pr'] = None
+                r['assignee'] = r['pr'] = r['author'] = None
                 moved_closed.append((d['name'], r['action']))
     return info, moved_merged, moved_closed
 
@@ -132,181 +135,186 @@ TEMPLATE = r'''<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PrestaShop Admin API — Endpoint Tracking</title>
+<script src="https://cdn.tailwindcss.com"></script>
 <style>
-:root{--bg:#0f1421;--panel:#171e2e;--panel2:#1d2638;--line:#2a3550;--txt:#e7ecf5;--muted:#93a0bd;
---green:#2ecc71;--greenbg:#10351f;--amber:#f5a623;--amberbg:#3a2c0c;--red:#e05260;--redbg:#3a1419;--accent:#5b8def;--code:#0b0f1a;}
-*{box-sizing:border-box}
-body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px;line-height:1.45}
-a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
-header{padding:28px 32px 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#141b2b,#0f1421)}
-h1{margin:0 0 4px;font-size:22px;font-weight:700}
-.sub{color:var(--muted);font-size:13px}.sub code{background:var(--code);padding:1px 6px;border-radius:4px}
-.wrap{padding:22px 32px 60px;max-width:1280px;margin:0 auto}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0 8px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
-.card .n{font-size:26px;font-weight:700}.card .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
-.card.impl .n{color:var(--green)}.card.prog .n{color:var(--amber)}.card.miss .n{color:var(--red)}
-.bar{height:14px;border-radius:8px;background:var(--panel2);overflow:hidden;display:flex;border:1px solid var(--line)}
-.bar i{display:block;height:100%}.bar .si{background:var(--green)}.bar .sp{background:var(--amber)}
-.overall{margin:14px 0 4px}.overall .bar{height:20px}
-.legendline{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin-top:8px}
-.legendline span{display:inline-flex;align-items:center;gap:6px}
-.dot{width:10px;height:10px;border-radius:3px;display:inline-block}
-.dot.i{background:var(--green)}.dot.p{background:var(--amber)}.dot.m{background:var(--red)}
-.controls{position:sticky;top:0;background:var(--bg);padding:10px 0 8px;z-index:5;border-bottom:1px solid var(--line);margin:22px 0 6px;display:flex;flex-direction:column;gap:9px}
-.crow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-input#q{flex:1;min-width:220px;background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:9px 12px;border-radius:8px;font-size:14px}
-select{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:8px 10px;border-radius:8px;font-size:13px;cursor:pointer}
-.lbl{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.seg button{background:var(--panel);color:var(--muted);border:0;padding:8px 12px;cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:5px}
-.seg button.on{background:var(--accent);color:#fff}.seg button .arr{font-size:10px;opacity:.85}
-.btn{background:var(--panel);color:var(--muted);border:1px solid var(--line);padding:8px 12px;border-radius:8px;cursor:pointer;font-size:13px}
-.btn:hover{color:var(--txt)}
-.count{color:var(--muted);font-size:13px;margin-left:auto}
-.domain{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-top:14px;overflow:hidden}
-.dh{display:flex;align-items:center;gap:14px;padding:12px 16px;cursor:pointer;user-select:none}
-.dh:hover{background:var(--panel2)}
-.dh .caret{color:var(--muted);transition:transform .15s}.domain.col .caret{transform:rotate(-90deg)}
-.dh .dn{font-weight:700;font-size:15px}
-.dh .dp{color:var(--muted);font-size:13px;white-space:nowrap;min-width:92px;text-align:right}
-.dh .bar{width:160px;flex-shrink:0}.dh .spacer{flex:1}
-table{width:100%;border-collapse:collapse}.domain.col table{display:none}
-th,td{text-align:left;padding:9px 16px;border-top:1px solid var(--line);vertical-align:top}
-th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;background:var(--panel2);cursor:pointer;user-select:none;white-space:nowrap}
-th .arr{font-size:9px;margin-left:4px;opacity:.6}
-td code{background:var(--code);padding:2px 6px;border-radius:4px;font-size:12.5px}
-.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:600;white-space:nowrap}
-.b-impl{background:var(--greenbg);color:var(--green)}.b-prog{background:var(--amberbg);color:var(--amber)}.b-miss{background:var(--redbg);color:var(--red)}
-.b-cmd{background:#1b2f4d;color:#7db0ff}.b-qry{background:#3a2348;color:#d39bf0}
-tr.row[hidden]{display:none}.ep{color:var(--muted)}.hide{display:none!important}
-footer{color:var(--muted);font-size:12px;padding:24px 32px;border-top:1px solid var(--line);text-align:center}
-.note{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:12px 16px;margin-top:16px;color:#c4cfe6;font-size:13px}
-.note b{color:var(--txt)}.empty{padding:40px;text-align:center;color:var(--muted)}
+  /* behaviour-only rules kept in CSS so the proven JS hooks stay intact */
+  .hide{display:none!important}
+  tr.row[hidden]{display:none}
+  .domain.col .dbody{display:none}
+  .domain.col .caret{transform:rotate(-90deg)}
+  .caret{transition:transform .15s ease}
+  .seg-btn.on{background-color:#1f2937;color:#fff;border-color:#1f2937;z-index:1}
+  .sortable .arr{font-size:9px;opacity:.6}
+  [data-c]{cursor:pointer;user-select:none}
 </style>
 </head>
-<body>
-<header>
-  <h1>PrestaShop Admin API — Endpoint Tracking</h1>
-  <div class="sub">CQRS Commands &amp; Queries mapped to Admin API endpoints &middot;
-    source <a href="https://github.com/PrestaShop/PrestaShop/issues/39630" target="_blank">issue #39630</a> &middot;
-    endpoints live in <a href="https://github.com/PrestaShop/ps_apiresources" target="_blank">ps_apiresources</a></div>
+<body class="bg-gray-50 text-gray-800 antialiased">
+
+<header class="bg-white border-b border-gray-200">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+    <h1 class="text-2xl font-bold text-gray-900">PrestaShop Admin API — Endpoint Tracking</h1>
+    <p class="mt-1 text-sm text-gray-500">
+      CQRS Commands &amp; Queries mapped to Admin API endpoints ·
+      source <a class="text-blue-600 hover:underline" href="https://github.com/PrestaShop/PrestaShop/issues/39630" target="_blank">issue #39630</a> ·
+      endpoints live in <a class="text-blue-600 hover:underline" href="https://github.com/PrestaShop/ps_apiresources" target="_blank">ps_apiresources</a>
+    </p>
+  </div>
 </header>
-<div class="wrap">
-  <div class="cards">
-    <div class="card"><div class="n" id="c-total">0</div><div class="l">Total endpoints</div></div>
-    <div class="card impl"><div class="n" id="c-impl">0</div><div class="l">Implemented</div></div>
-    <div class="card prog"><div class="n" id="c-prog">0</div><div class="l">In progress</div></div>
-    <div class="card miss"><div class="n" id="c-miss">0</div><div class="l">Missing</div></div>
-    <div class="card"><div class="n" id="c-pct">0%</div><div class="l">Progress</div></div>
-    <div class="card"><div class="n" id="c-proj">0%</div><div class="l">Projected (PRs merged)</div></div>
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 pb-20">
+
+  <!-- stat cards -->
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-6">
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"><div id="c-total" class="text-2xl font-bold text-gray-900">0</div><div class="text-xs uppercase tracking-wide text-gray-500 mt-0.5">Total</div></div>
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"><div id="c-impl" class="text-2xl font-bold text-teal-600">0</div><div class="text-xs uppercase tracking-wide text-gray-500 mt-0.5">Implemented</div></div>
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"><div id="c-prog" class="text-2xl font-bold text-amber-500">0</div><div class="text-xs uppercase tracking-wide text-gray-500 mt-0.5">In progress</div></div>
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"><div id="c-miss" class="text-2xl font-bold text-red-600">0</div><div class="text-xs uppercase tracking-wide text-gray-500 mt-0.5">Missing</div></div>
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"><div id="c-pct" class="text-2xl font-bold text-indigo-600">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 mt-0.5">Progress</div></div>
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"><div id="c-proj" class="text-2xl font-bold text-indigo-400">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 mt-0.5">Projected</div></div>
   </div>
-  <div class="overall">
-    <div class="bar"><i class="si" id="ov-i"></i><i class="sp" id="ov-p"></i></div>
-    <div class="legendline">
-      <span><i class="dot i"></i> Implemented</span>
-      <span><i class="dot p"></i> In progress (open PR)</span>
-      <span><i class="dot m"></i> Missing</span>
+
+  <!-- overall progress -->
+  <div class="mt-4">
+    <div class="flex h-3 rounded-full bg-gray-200 overflow-hidden">
+      <div id="ov-i" class="bg-teal-500 h-full"></div>
+      <div id="ov-p" class="bg-amber-400 h-full"></div>
+    </div>
+    <div class="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs text-gray-500">
+      <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-teal-500"></span> Implemented</span>
+      <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-amber-400"></span> In progress (open PR)</span>
+      <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-red-500"></span> Missing</span>
     </div>
   </div>
-  <div class="note">
+
+  <!-- info note (Preline soft alert) -->
+  <div class="mt-4 bg-blue-50 border border-blue-200 border-s-4 border-s-blue-500 text-blue-800 rounded-lg p-4 text-sm">
     <b>Auto-generated __DATE__.</b> Built live from issue #39630, with every referenced
-    <code>ps_apiresources</code> PR re-checked against GitHub (merged &rarr; Implemented, closed &rarr; Missing, open &rarr; In&nbsp;Progress).
-    Exact-duplicate rows from the source table are de-duplicated. __MERGEDNOTE__
+    <code class="bg-white/60 px-1 rounded">ps_apiresources</code> PR re-checked against GitHub (merged → Implemented, closed → Missing, open → In&nbsp;Progress),
+    and the verified PR author attached. Exact-duplicate source rows are de-duplicated. __MERGEDNOTE__
   </div>
-  <div class="controls">
-    <div class="crow">
-      <input id="q" placeholder="Search action, endpoint, domain or contributor…" autocomplete="off">
-      <select id="f-domain"><option value="all">All domains</option></select>
-      <span class="count" id="count"></span>
+
+  <!-- controls -->
+  <div class="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mt-6 bg-gray-50/85 backdrop-blur border-b border-gray-200 space-y-3">
+    <div class="flex flex-wrap gap-2 items-center">
+      <input id="q" placeholder="Search action, endpoint, domain or contributor…" autocomplete="off"
+        class="grow min-w-56 py-2 px-3 block border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500">
+      <select id="f-domain" class="py-2 pe-9 ps-3 block border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500"><option value="all">All domains</option></select>
+      <select id="f-author" class="py-2 pe-9 ps-3 block border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500"><option value="all">All PR authors</option></select>
+      <span class="ms-auto text-sm text-gray-500" id="count"></span>
     </div>
-    <div class="crow">
-      <span class="lbl">Status</span>
-      <div class="seg" id="f-status">
-        <button data-v="all" class="on">All</button>
-        <button data-v="implemented">Implemented</button>
-        <button data-v="in_progress">In progress</button>
-        <button data-v="missing">Missing</button>
+    <div class="flex flex-wrap gap-x-4 gap-y-2 items-center">
+      <div class="flex items-center gap-2">
+        <span class="text-xs uppercase tracking-wide text-gray-400">Status</span>
+        <div class="inline-flex rounded-lg shadow-sm" id="f-status">
+          <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px first:ms-0 first:rounded-s-lg last:rounded-e-lg">All</button>
+          <button data-v="implemented" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px">Implemented</button>
+          <button data-v="in_progress" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px">In progress</button>
+          <button data-v="missing" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px last:rounded-e-lg">Missing</button>
+        </div>
       </div>
-      <span class="lbl">Type</span>
-      <div class="seg" id="f-type">
-        <button data-v="all" class="on">All</button>
-        <button data-v="Command">Commands</button>
-        <button data-v="Query">Queries</button>
+      <div class="flex items-center gap-2">
+        <span class="text-xs uppercase tracking-wide text-gray-400">Type</span>
+        <div class="inline-flex rounded-lg shadow-sm" id="f-type">
+          <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 first:rounded-s-lg">All</button>
+          <button data-v="Command" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px">Commands</button>
+          <button data-v="Query" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px last:rounded-e-lg">Queries</button>
+        </div>
       </div>
-    </div>
-    <div class="crow">
-      <span class="lbl">Sort domains</span>
-      <div class="seg" id="sort">
-        <button data-k="name" class="on">Name <span class="arr">▲</span></button>
-        <button data-k="pct">Progress&nbsp;% <span class="arr"></span></button>
-        <button data-k="total">Total <span class="arr"></span></button>
-        <button data-k="missing">Missing <span class="arr"></span></button>
-        <button data-k="prog">In&nbsp;progress <span class="arr"></span></button>
+      <div class="flex items-center gap-2">
+        <span class="text-xs uppercase tracking-wide text-gray-400">Sort</span>
+        <div class="inline-flex rounded-lg shadow-sm" id="sort">
+          <button data-k="name" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 first:rounded-s-lg">Name <span class="arr">▲</span></button>
+          <button data-k="pct" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px">Progress <span class="arr"></span></button>
+          <button data-k="total" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px">Total <span class="arr"></span></button>
+          <button data-k="missing" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px">Missing <span class="arr"></span></button>
+          <button data-k="prog" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px last:rounded-e-lg">In&nbsp;progress <span class="arr"></span></button>
+        </div>
       </div>
-      <button class="btn" id="expand">Expand all</button>
-      <button class="btn" id="collapse">Collapse all</button>
+      <button id="expand" class="py-1.5 px-3 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50">Expand all</button>
+      <button id="collapse" class="py-1.5 px-3 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50">Collapse all</button>
     </div>
   </div>
-  <div id="list"></div>
-  <div class="empty hide" id="empty">No endpoint matches the current filters.</div>
-</div>
-<footer>Generated __DATE__ from PrestaShop/PrestaShop#39630 with live PR verification against PrestaShop/ps_apiresources. Static file — no network calls.</footer>
+
+  <div id="list" class="mt-4 space-y-3"></div>
+  <div id="empty" class="hide py-16 text-center text-gray-400">No endpoint matches the current filters.</div>
+</main>
+
+<footer class="border-t border-gray-200 py-6 text-center text-xs text-gray-400">
+  Generated __DATE__ from PrestaShop/PrestaShop#39630 with live PR verification against PrestaShop/ps_apiresources ·
+  styled with <a class="text-blue-600 hover:underline" href="https://preline.co" target="_blank">Preline UI</a>.
+</footer>
 
 <script id="data" type="application/json">__DATA__</script>
+<script src="https://cdn.jsdelivr.net/npm/preline@2/dist/preline.min.js"></script>
 <script>
 const DATA = JSON.parse(document.getElementById('data').textContent);
-const SB = {implemented:'b-impl', in_progress:'b-prog', missing:'b-miss'};
-const SL = {implemented:'✅ Implemented', in_progress:'🚧 In Progress', missing:'❌ Missing'};
+const SL = {implemented:'Implemented', in_progress:'In progress', missing:'Missing'};
+const SBADGE = {implemented:'bg-teal-100 text-teal-800', in_progress:'bg-yellow-100 text-yellow-800', missing:'bg-red-100 text-red-800'};
+const SDOT = {implemented:'✅', in_progress:'🚧', missing:'❌'};
 const SORD = {implemented:0, in_progress:1, missing:2};
 const esc = s => (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let fStatus='all', fType='all', fQ='', fDomain='all';
+let fStatus='all', fType='all', fQ='', fDomain='all', fAuthor='all';
 let sortKey='name', sortDir=1;
 const prUrl = n => 'https://github.com/PrestaShop/ps_apiresources/pull/'+n;
+const BADGE = 'inline-flex items-center gap-x-1 py-0.5 px-2 rounded-full text-xs font-medium';
 
 function buildRow(r){
-  let assignee='';
+  const author = r.author || r.assignee || '';
+  let who='';
   if(r.pr){
-    const who = r.assignee ? '<a href="https://github.com/'+esc(r.assignee)+'" target="_blank">'+esc(r.assignee)+'</a> / ' : '';
-    const merged = r.merged_pr ? ' <span class="badge b-impl" style="font-size:10px">merged</span>' : '';
-    assignee = who+'<a href="'+prUrl(r.pr)+'" target="_blank">PR #'+r.pr+'</a>'+merged;
+    const name = author ? '<a class="text-blue-600 hover:underline" href="https://github.com/'+esc(author)+'" target="_blank">'+esc(author)+'</a> / ' : '';
+    const merged = r.merged_pr ? ' <span class="'+BADGE+' bg-teal-100 text-teal-800">merged</span>' : '';
+    who = name+'<a class="text-blue-600 hover:underline" href="'+prUrl(r.pr)+'" target="_blank">PR #'+r.pr+'</a>'+merged;
   }
-  const ep = r.endpoint ? '<code>'+esc(r.endpoint)+'</code>' : '<span class="ep">—</span>';
-  const tb = r.type==='Command'?'b-cmd':'b-qry';
-  return '<tr class="row" data-s="'+r.status+'" data-t="'+r.type+'"'+
+  const ep = r.endpoint ? '<code class="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded text-xs">'+esc(r.endpoint)+'</code>' : '<span class="text-gray-300">—</span>';
+  const tb = r.type==='Command'?'bg-blue-100 text-blue-800':'bg-purple-100 text-purple-800';
+  return '<tr class="row hover:bg-gray-50" data-s="'+r.status+'" data-t="'+r.type+'"'+
     ' data-action="'+esc(r.action.toLowerCase())+'" data-ep="'+esc((r.endpoint||'').toLowerCase())+'"'+
-    ' data-sord="'+SORD[r.status]+'" data-k="'+esc((r.action+' '+(r.endpoint||'')+' '+(r.assignee||'')).toLowerCase())+'">'+
-    '<td><code>'+esc(r.action)+'</code></td>'+
-    '<td><span class="badge '+tb+'">'+r.type+'</span></td>'+
-    '<td><span class="badge '+SB[r.status]+'">'+SL[r.status]+'</span></td>'+
-    '<td>'+ep+'</td>'+
-    '<td>'+(assignee||'<span class="ep">—</span>')+'</td></tr>';
+    ' data-author="'+esc(author)+'" data-sord="'+SORD[r.status]+'"'+
+    ' data-k="'+esc((r.action+' '+(r.endpoint||'')+' '+author).toLowerCase())+'">'+
+    '<td class="py-2.5 px-4 align-top"><code class="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded text-xs">'+esc(r.action)+'</code></td>'+
+    '<td class="py-2.5 px-4 align-top"><span class="'+BADGE+' '+tb+'">'+r.type+'</span></td>'+
+    '<td class="py-2.5 px-4 align-top"><span class="'+BADGE+' '+SBADGE[r.status]+'">'+SDOT[r.status]+' '+SL[r.status]+'</span></td>'+
+    '<td class="py-2.5 px-4 align-top">'+ep+'</td>'+
+    '<td class="py-2.5 px-4 align-top text-sm text-gray-600">'+(who||'<span class="text-gray-300">—</span>')+'</td></tr>';
 }
 
 function render(){
-  const list=document.getElementById('list'), dsel=document.getElementById('f-domain');
+  const list=document.getElementById('list');
   let html='', opts='<option value="all">All domains</option>';
+  const authors=new Set();
   for(const d of DATA.domains){
     const i=d.rows.filter(r=>r.status==='implemented').length;
     const p=d.rows.filter(r=>r.status==='in_progress').length;
     const m=d.rows.filter(r=>r.status==='missing').length;
     const t=d.rows.length, pct=i/t*100, dn=esc(d.name.toLowerCase());
+    d.rows.forEach(r=>{const a=r.author||r.assignee; if(a) authors.add(a);});
     opts+='<option value="'+dn+'">'+esc(d.name)+' ('+i+'/'+t+')</option>';
     const rows=d.rows.map(buildRow).join('');
-    html+='<div class="domain" data-dn="'+dn+'" data-name="'+dn+'" data-pct="'+pct.toFixed(2)+
+    html+='<div class="domain bg-white border border-gray-200 rounded-xl overflow-hidden" data-dn="'+dn+'" data-name="'+dn+'" data-pct="'+pct.toFixed(2)+
       '" data-total="'+t+'" data-missing="'+m+'" data-prog="'+p+'" data-impl="'+i+'">'+
-      '<div class="dh" onclick="this.parentNode.classList.toggle(\'col\')">'+
-        '<span class="caret">▼</span><span class="dn">'+esc(d.name)+'</span><span class="spacer"></span>'+
-        '<div class="bar"><i class="si" style="width:'+(i/t*100)+'%"></i><i class="sp" style="width:'+(p/t*100)+'%"></i></div>'+
-        '<span class="dp">'+i+'/'+t+' &middot; '+Math.round(pct)+'%</span></div>'+
-      '<table><thead><tr>'+
-        '<th data-c="action">Action<span class="arr"></span></th>'+
-        '<th data-c="type">Type<span class="arr"></span></th>'+
-        '<th data-c="status">Status<span class="arr"></span></th>'+
-        '<th data-c="ep">API Endpoint<span class="arr"></span></th>'+
-        '<th>Assignee / PR</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+      '<div class="dh flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-gray-50 select-none" onclick="this.parentNode.classList.toggle(\'col\')">'+
+        '<span class="caret text-gray-400 text-xs">▼</span>'+
+        '<span class="font-semibold text-gray-900">'+esc(d.name)+'</span>'+
+        '<span class="grow"></span>'+
+        '<div class="hidden sm:flex h-2.5 w-40 rounded-full bg-gray-200 overflow-hidden shrink-0"><div class="bg-teal-500 h-full" style="width:'+(i/t*100)+'%"></div><div class="bg-amber-400 h-full" style="width:'+(p/t*100)+'%"></div></div>'+
+        '<span class="text-sm text-gray-500 whitespace-nowrap w-24 text-right">'+i+'/'+t+' · '+Math.round(pct)+'%</span>'+
+      '</div>'+
+      '<div class="dbody overflow-x-auto border-t border-gray-100"><table class="w-full text-left">'+
+        '<thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide sortable">'+
+        '<tr>'+
+          '<th data-c="action" class="py-2.5 px-4 font-semibold">Action<span class="arr"></span></th>'+
+          '<th data-c="type" class="py-2.5 px-4 font-semibold">Type<span class="arr"></span></th>'+
+          '<th data-c="status" class="py-2.5 px-4 font-semibold">Status<span class="arr"></span></th>'+
+          '<th data-c="ep" class="py-2.5 px-4 font-semibold">API Endpoint<span class="arr"></span></th>'+
+          '<th class="py-2.5 px-4 font-semibold">Author / PR</th>'+
+        '</tr></thead><tbody class="divide-y divide-gray-100">'+rows+'</tbody></table></div></div>';
   }
-  list.innerHTML=html; dsel.innerHTML=opts;
+  list.innerHTML=html;
+  document.getElementById('f-domain').innerHTML=opts;
+  document.getElementById('f-author').innerHTML='<option value="all">All PR authors</option>'+
+    [...authors].sort((a,b)=>a.toLowerCase()<b.toLowerCase()?-1:1)
+      .map(a=>'<option value="'+esc(a)+'">'+esc(a)+'</option>').join('');
 }
 
 function setStats(){
@@ -335,6 +343,7 @@ function applyFilter(){
     let vis=0;
     dom.querySelectorAll('tr.row').forEach(tr=>{
       const ok = domOk && (fStatus==='all'||tr.dataset.s===fStatus) && (fType==='all'||tr.dataset.t===fType)
+        && (fAuthor==='all'||tr.dataset.author===fAuthor)
         && (!fQ || tr.dataset.k.includes(fQ) || dom.dataset.dn.includes(fQ));
       tr.hidden=!ok; if(ok){vis++;shown++;}
     });
@@ -358,10 +367,19 @@ function sortTable(th){
   rows.forEach(r=>tbody.appendChild(r));
 }
 
+function segWire(id, set){
+  document.querySelectorAll('#'+id+' button').forEach(b=>b.onclick=()=>{
+    set(b);
+    document.querySelectorAll('#'+id+' button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+  });
+}
+
 document.getElementById('q').addEventListener('input',e=>{fQ=e.target.value.trim().toLowerCase();applyFilter();});
 document.getElementById('f-domain').addEventListener('change',e=>{fDomain=e.target.value;applyFilter();});
-document.querySelectorAll('#f-status button').forEach(b=>b.onclick=()=>{fStatus=b.dataset.v;document.querySelectorAll('#f-status button').forEach(x=>x.classList.remove('on'));b.classList.add('on');applyFilter();});
-document.querySelectorAll('#f-type button').forEach(b=>b.onclick=()=>{fType=b.dataset.v;document.querySelectorAll('#f-type button').forEach(x=>x.classList.remove('on'));b.classList.add('on');applyFilter();});
+document.getElementById('f-author').addEventListener('change',e=>{fAuthor=e.target.value;applyFilter();});
+segWire('f-status', b=>{fStatus=b.dataset.v;applyFilter();});
+segWire('f-type', b=>{fType=b.dataset.v;applyFilter();});
 document.querySelectorAll('#sort button').forEach(b=>b.onclick=()=>{
   const k=b.dataset.k;
   if(sortKey===k){sortDir*=-1;}else{sortKey=k;sortDir=(k==='name')?1:-1;}
@@ -374,6 +392,7 @@ document.getElementById('collapse').onclick=()=>document.querySelectorAll('.doma
 document.addEventListener('click',e=>{const th=e.target.closest('th[data-c]');if(th)sortTable(th);});
 
 setStats();render();sortDomains();applyFilter();
+if(window.HSStaticMethods) window.HSStaticMethods.autoInit();
 </script>
 </body>
 </html>'''
@@ -382,7 +401,7 @@ setStats();render();sortDomains();applyFilter();
 def main():
     body = fetch_issue_body()
     domains = parse(body)
-    states, merged, closed = reconcile(domains)
+    _info, merged, closed = reconcile(domains)
     note = ""
     if merged:
         items = ", ".join(f"#{pr} ({dom} <code>{act}</code>)" for dom, act, pr in merged)
