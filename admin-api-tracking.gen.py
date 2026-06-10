@@ -68,24 +68,35 @@ def parse(body):
     return domains
 
 
-def pr_state(num):
+def pr_info(num):
+    """Return (state, author_login). state normalized to OPEN/MERGED/CLOSED.
+    Uses the REST pulls endpoint (reliable for public cross-repo reads with any token,
+    including the Actions GITHUB_TOKEN) — avoids GraphQL, which 401s intermittently."""
     try:
-        d = gh_json(["pr", "view", str(num), "--repo", REPO_API, "--json", "state"])
-        return d.get("state")  # OPEN / MERGED / CLOSED
+        d = gh_json(["api", f"repos/{REPO_API}/pulls/{num}"])
+        if d.get("merged"):
+            state = "MERGED"
+        elif d.get("state") == "closed":
+            state = "CLOSED"
+        else:
+            state = "OPEN"
+        return state, (d.get("user") or {}).get("login")
     except Exception as e:
         sys.stderr.write(f"warn: PR #{num}: {e}\n")
-        return None
+        return None, None
 
 
 def reconcile(domains):
     prs = sorted({r['pr'] for d in domains for r in d['rows'] if r['pr']})
-    states = {n: pr_state(n) for n in prs}
+    info = {n: pr_info(n) for n in prs}
     moved_merged, moved_closed = [], []
     for d in domains:
         for r in d['rows']:
             if not r['pr'] or r['status'] != 'in_progress':
                 continue
-            st = states.get(r['pr'])
+            st, author = info.get(r['pr'], (None, None))
+            if author:
+                r['assignee'] = author  # verified real PR creator (overrides issue listing)
             if st == 'MERGED':
                 r['status'] = 'implemented'
                 r['merged_pr'] = r['pr']
@@ -98,7 +109,7 @@ def reconcile(domains):
                 r['endpoint'] = ''
                 r['assignee'] = r['pr'] = None
                 moved_closed.append((d['name'], r['action']))
-    return states, moved_merged, moved_closed
+    return info, moved_merged, moved_closed
 
 
 def build(domains, generated_at, merged_note):
