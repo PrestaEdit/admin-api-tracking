@@ -9,7 +9,7 @@ Pipeline (no manual steps):
   4. Reconcile statuses:  PR merged -> Implemented,  PR closed (not merged) -> Missing,
      PR still open -> In Progress.  The verified PR author is attached to each row.
   5. Render a standalone, interactive HTML file styled with Preline UI / Tailwind
-     (search / filters by status, type, domain, author / sorts).
+     (dark mode, search / filters by status, type, domain, author / sorts).
 
 Requirements at runtime: python3 + an authenticated `gh` CLI.
 Usage: python3 admin-api-tracking.gen.py [output.html]
@@ -136,6 +136,8 @@ TEMPLATE = r'''<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PrestaShop Admin API — Endpoint Tracking</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={darkMode:'class'}</script>
+<script>(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark');}catch(e){}})();</script>
 <style>
   /* behaviour-only rules kept in CSS so the proven JS hooks stay intact */
   .hide{display:none!important}
@@ -143,21 +145,24 @@ TEMPLATE = r'''<!DOCTYPE html>
   .domain.col .dbody{display:none}
   .domain.col .caret{transform:rotate(-90deg)}
   .caret{transition:transform .15s ease}
-  .seg-btn.on{background-color:#1f2937;color:#fff;border-color:#1f2937;z-index:1}
+  .seg-btn.on{background-color:#2563eb;color:#fff;border-color:#2563eb;z-index:1}
   .sortable .arr{font-size:9px;opacity:.6}
   [data-c]{cursor:pointer;user-select:none}
 </style>
 </head>
-<body class="bg-gray-50 text-gray-800 antialiased">
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 antialiased">
 
-<header class="bg-white border-b border-gray-200">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-    <h1 class="text-2xl font-bold text-gray-900">PrestaShop Admin API — Endpoint Tracking</h1>
-    <p class="mt-1 text-sm text-gray-500">
-      CQRS Commands &amp; Queries mapped to Admin API endpoints ·
-      source <a class="text-blue-600 hover:underline" href="https://github.com/PrestaShop/PrestaShop/issues/39630" target="_blank">issue #39630</a> ·
-      endpoints live in <a class="text-blue-600 hover:underline" href="https://github.com/PrestaShop/ps_apiresources" target="_blank">ps_apiresources</a>
-    </p>
+<header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex items-start gap-4">
+    <div class="grow">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">PrestaShop Admin API — Endpoint Tracking</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        CQRS Commands &amp; Queries mapped to Admin API endpoints ·
+        source <a class="text-blue-600 dark:text-blue-400 hover:underline" href="https://github.com/PrestaShop/PrestaShop/issues/39630" target="_blank">issue #39630</a> ·
+        endpoints live in <a class="text-blue-600 dark:text-blue-400 hover:underline" href="https://github.com/PrestaShop/ps_apiresources" target="_blank">ps_apiresources</a>
+      </p>
+    </div>
+    <button id="theme" title="Toggle dark mode" class="shrink-0 size-10 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-lg hover:bg-gray-50 dark:hover:bg-gray-700">🌙</button>
   </div>
 </header>
 
@@ -165,21 +170,21 @@ TEMPLATE = r'''<!DOCTYPE html>
 
   <!-- stat cards -->
   <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-6">
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"><div id="c-total" class="text-2xl font-bold text-gray-900">0</div><div class="text-xs uppercase tracking-wide text-gray-500 mt-0.5">Total</div></div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"><div id="c-impl" class="text-2xl font-bold text-teal-600">0</div><div class="text-xs uppercase tracking-wide text-gray-500 mt-0.5">Implemented</div></div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"><div id="c-prog" class="text-2xl font-bold text-amber-500">0</div><div class="text-xs uppercase tracking-wide text-gray-500 mt-0.5">In progress</div></div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"><div id="c-miss" class="text-2xl font-bold text-red-600">0</div><div class="text-xs uppercase tracking-wide text-gray-500 mt-0.5">Missing</div></div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"><div id="c-pct" class="text-2xl font-bold text-indigo-600">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 mt-0.5">Progress</div></div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"><div id="c-proj" class="text-2xl font-bold text-indigo-400">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 mt-0.5">Projected</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-total" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Total</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-impl" class="text-2xl font-bold text-teal-600 dark:text-teal-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Implemented</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-prog" class="text-2xl font-bold text-amber-500 dark:text-amber-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">In progress</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-miss" class="text-2xl font-bold text-red-600 dark:text-red-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Missing</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-pct" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Progress</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-proj" class="text-2xl font-bold text-indigo-400 dark:text-indigo-300">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Projected</div></div>
   </div>
 
   <!-- overall progress -->
   <div class="mt-4">
-    <div class="flex h-3 rounded-full bg-gray-200 overflow-hidden">
+    <div class="flex h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
       <div id="ov-i" class="bg-teal-500 h-full"></div>
       <div id="ov-p" class="bg-amber-400 h-full"></div>
     </div>
-    <div class="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs text-gray-500">
+    <div class="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
       <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-teal-500"></span> Implemented</span>
       <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-amber-400"></span> In progress (open PR)</span>
       <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-red-500"></span> Missing</span>
@@ -187,61 +192,61 @@ TEMPLATE = r'''<!DOCTYPE html>
   </div>
 
   <!-- info note (Preline soft alert) -->
-  <div class="mt-4 bg-blue-50 border border-blue-200 border-s-4 border-s-blue-500 text-blue-800 rounded-lg p-4 text-sm">
+  <div class="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900 border-s-4 border-s-blue-500 text-blue-800 dark:text-blue-200 rounded-lg p-4 text-sm">
     <b>Auto-generated __DATE__.</b> Built live from issue #39630, with every referenced
-    <code class="bg-white/60 px-1 rounded">ps_apiresources</code> PR re-checked against GitHub (merged → Implemented, closed → Missing, open → In&nbsp;Progress),
+    <code class="bg-white/60 dark:bg-white/10 px-1 rounded">ps_apiresources</code> PR re-checked against GitHub (merged → Implemented, closed → Missing, open → In&nbsp;Progress),
     and the verified PR author attached. Exact-duplicate source rows are de-duplicated. __MERGEDNOTE__
   </div>
 
   <!-- controls -->
-  <div class="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mt-6 bg-gray-50/85 backdrop-blur border-b border-gray-200 space-y-3">
+  <div class="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mt-6 bg-gray-50/85 dark:bg-gray-900/85 backdrop-blur border-b border-gray-200 dark:border-gray-700 space-y-3">
     <div class="flex flex-wrap gap-2 items-center">
       <input id="q" placeholder="Search action, endpoint, domain or contributor…" autocomplete="off"
-        class="grow min-w-56 py-2 px-3 block border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500">
-      <select id="f-domain" class="py-2 pe-9 ps-3 block border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500"><option value="all">All domains</option></select>
-      <select id="f-author" class="py-2 pe-9 ps-3 block border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-blue-500"><option value="all">All PR authors</option></select>
-      <span class="ms-auto text-sm text-gray-500" id="count"></span>
+        class="grow min-w-56 py-2 px-3 block rounded-lg text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-500 focus:ring-blue-500">
+      <select id="f-domain" class="py-2 pe-9 ps-3 block rounded-lg text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-blue-500 focus:ring-blue-500"><option value="all">All domains</option></select>
+      <select id="f-author" class="py-2 pe-9 ps-3 block rounded-lg text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-blue-500 focus:ring-blue-500"><option value="all">All PR authors</option></select>
+      <span class="ms-auto text-sm text-gray-500 dark:text-gray-400" id="count"></span>
     </div>
     <div class="flex flex-wrap gap-x-4 gap-y-2 items-center">
       <div class="flex items-center gap-2">
-        <span class="text-xs uppercase tracking-wide text-gray-400">Status</span>
+        <span class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Status</span>
         <div class="inline-flex rounded-lg shadow-sm" id="f-status">
-          <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px first:ms-0 first:rounded-s-lg last:rounded-e-lg">All</button>
-          <button data-v="implemented" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px">Implemented</button>
-          <button data-v="in_progress" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px">In progress</button>
-          <button data-v="missing" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px last:rounded-e-lg">Missing</button>
+          <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-s-lg">All</button>
+          <button data-v="implemented" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Implemented</button>
+          <button data-v="in_progress" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">In progress</button>
+          <button data-v="missing" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg">Missing</button>
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-xs uppercase tracking-wide text-gray-400">Type</span>
+        <span class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Type</span>
         <div class="inline-flex rounded-lg shadow-sm" id="f-type">
-          <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 first:rounded-s-lg">All</button>
-          <button data-v="Command" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px">Commands</button>
-          <button data-v="Query" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px last:rounded-e-lg">Queries</button>
+          <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-s-lg">All</button>
+          <button data-v="Command" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Commands</button>
+          <button data-v="Query" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg">Queries</button>
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-xs uppercase tracking-wide text-gray-400">Sort</span>
+        <span class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Sort</span>
         <div class="inline-flex rounded-lg shadow-sm" id="sort">
-          <button data-k="name" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 first:rounded-s-lg">Name <span class="arr">▲</span></button>
-          <button data-k="pct" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px">Progress <span class="arr"></span></button>
-          <button data-k="total" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px">Total <span class="arr"></span></button>
-          <button data-k="missing" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px">Missing <span class="arr"></span></button>
-          <button data-k="prog" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 -ms-px last:rounded-e-lg">In&nbsp;progress <span class="arr"></span></button>
+          <button data-k="name" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-s-lg">Name <span class="arr">▲</span></button>
+          <button data-k="pct" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Progress <span class="arr"></span></button>
+          <button data-k="total" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Total <span class="arr"></span></button>
+          <button data-k="missing" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Missing <span class="arr"></span></button>
+          <button data-k="prog" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg">In&nbsp;progress <span class="arr"></span></button>
         </div>
       </div>
-      <button id="expand" class="py-1.5 px-3 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50">Expand all</button>
-      <button id="collapse" class="py-1.5 px-3 text-sm font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50">Collapse all</button>
+      <button id="expand" class="py-1.5 px-3 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Expand all</button>
+      <button id="collapse" class="py-1.5 px-3 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Collapse all</button>
     </div>
   </div>
 
   <div id="list" class="mt-4 space-y-3"></div>
-  <div id="empty" class="hide py-16 text-center text-gray-400">No endpoint matches the current filters.</div>
+  <div id="empty" class="hide py-16 text-center text-gray-400 dark:text-gray-500">No endpoint matches the current filters.</div>
 </main>
 
-<footer class="border-t border-gray-200 py-6 text-center text-xs text-gray-400">
+<footer class="border-t border-gray-200 dark:border-gray-700 py-6 text-center text-xs text-gray-400 dark:text-gray-500">
   Generated __DATE__ from PrestaShop/PrestaShop#39630 with live PR verification against PrestaShop/ps_apiresources ·
-  styled with <a class="text-blue-600 hover:underline" href="https://preline.co" target="_blank">Preline UI</a>.
+  styled with <a class="text-blue-600 dark:text-blue-400 hover:underline" href="https://preline.co" target="_blank">Preline UI</a>.
 </footer>
 
 <script id="data" type="application/json">__DATA__</script>
@@ -249,7 +254,11 @@ TEMPLATE = r'''<!DOCTYPE html>
 <script>
 const DATA = JSON.parse(document.getElementById('data').textContent);
 const SL = {implemented:'Implemented', in_progress:'In progress', missing:'Missing'};
-const SBADGE = {implemented:'bg-teal-100 text-teal-800', in_progress:'bg-yellow-100 text-yellow-800', missing:'bg-red-100 text-red-800'};
+const SBADGE = {
+  implemented:'bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300',
+  in_progress:'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300',
+  missing:'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300'
+};
 const SDOT = {implemented:'✅', in_progress:'🚧', missing:'❌'};
 const SORD = {implemented:0, in_progress:1, missing:2};
 const esc = s => (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -257,26 +266,28 @@ let fStatus='all', fType='all', fQ='', fDomain='all', fAuthor='all';
 let sortKey='name', sortDir=1;
 const prUrl = n => 'https://github.com/PrestaShop/ps_apiresources/pull/'+n;
 const BADGE = 'inline-flex items-center gap-x-1 py-0.5 px-2 rounded-full text-xs font-medium';
+const CODE = 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-1.5 py-0.5 rounded text-xs';
+const LINK = 'text-blue-600 dark:text-blue-400 hover:underline';
 
 function buildRow(r){
   const author = r.author || r.assignee || '';
   let who='';
   if(r.pr){
-    const name = author ? '<a class="text-blue-600 hover:underline" href="https://github.com/'+esc(author)+'" target="_blank">'+esc(author)+'</a> / ' : '';
-    const merged = r.merged_pr ? ' <span class="'+BADGE+' bg-teal-100 text-teal-800">merged</span>' : '';
-    who = name+'<a class="text-blue-600 hover:underline" href="'+prUrl(r.pr)+'" target="_blank">PR #'+r.pr+'</a>'+merged;
+    const name = author ? '<a class="'+LINK+'" href="https://github.com/'+esc(author)+'" target="_blank">'+esc(author)+'</a> / ' : '';
+    const merged = r.merged_pr ? ' <span class="'+BADGE+' bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300">merged</span>' : '';
+    who = name+'<a class="'+LINK+'" href="'+prUrl(r.pr)+'" target="_blank">PR #'+r.pr+'</a>'+merged;
   }
-  const ep = r.endpoint ? '<code class="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded text-xs">'+esc(r.endpoint)+'</code>' : '<span class="text-gray-300">—</span>';
-  const tb = r.type==='Command'?'bg-blue-100 text-blue-800':'bg-purple-100 text-purple-800';
-  return '<tr class="row hover:bg-gray-50" data-s="'+r.status+'" data-t="'+r.type+'"'+
+  const ep = r.endpoint ? '<code class="'+CODE+'">'+esc(r.endpoint)+'</code>' : '<span class="text-gray-300 dark:text-gray-600">—</span>';
+  const tb = r.type==='Command'?'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300':'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-300';
+  return '<tr class="row hover:bg-gray-50 dark:hover:bg-gray-700/40" data-s="'+r.status+'" data-t="'+r.type+'"'+
     ' data-action="'+esc(r.action.toLowerCase())+'" data-ep="'+esc((r.endpoint||'').toLowerCase())+'"'+
     ' data-author="'+esc(author)+'" data-sord="'+SORD[r.status]+'"'+
     ' data-k="'+esc((r.action+' '+(r.endpoint||'')+' '+author).toLowerCase())+'">'+
-    '<td class="py-2.5 px-4 align-top"><code class="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded text-xs">'+esc(r.action)+'</code></td>'+
+    '<td class="py-2.5 px-4 align-top"><code class="'+CODE+'">'+esc(r.action)+'</code></td>'+
     '<td class="py-2.5 px-4 align-top"><span class="'+BADGE+' '+tb+'">'+r.type+'</span></td>'+
     '<td class="py-2.5 px-4 align-top"><span class="'+BADGE+' '+SBADGE[r.status]+'">'+SDOT[r.status]+' '+SL[r.status]+'</span></td>'+
     '<td class="py-2.5 px-4 align-top">'+ep+'</td>'+
-    '<td class="py-2.5 px-4 align-top text-sm text-gray-600">'+(who||'<span class="text-gray-300">—</span>')+'</td></tr>';
+    '<td class="py-2.5 px-4 align-top text-sm text-gray-600 dark:text-gray-300">'+(who||'<span class="text-gray-300 dark:text-gray-600">—</span>')+'</td></tr>';
 }
 
 function render(){
@@ -291,24 +302,24 @@ function render(){
     d.rows.forEach(r=>{const a=r.author||r.assignee; if(a) authors.add(a);});
     opts+='<option value="'+dn+'">'+esc(d.name)+' ('+i+'/'+t+')</option>';
     const rows=d.rows.map(buildRow).join('');
-    html+='<div class="domain bg-white border border-gray-200 rounded-xl overflow-hidden" data-dn="'+dn+'" data-name="'+dn+'" data-pct="'+pct.toFixed(2)+
+    html+='<div class="domain bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden" data-dn="'+dn+'" data-name="'+dn+'" data-pct="'+pct.toFixed(2)+
       '" data-total="'+t+'" data-missing="'+m+'" data-prog="'+p+'" data-impl="'+i+'">'+
-      '<div class="dh flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-gray-50 select-none" onclick="this.parentNode.classList.toggle(\'col\')">'+
+      '<div class="dh flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 select-none" onclick="this.parentNode.classList.toggle(\'col\')">'+
         '<span class="caret text-gray-400 text-xs">▼</span>'+
-        '<span class="font-semibold text-gray-900">'+esc(d.name)+'</span>'+
+        '<span class="font-semibold text-gray-900 dark:text-gray-100">'+esc(d.name)+'</span>'+
         '<span class="grow"></span>'+
-        '<div class="hidden sm:flex h-2.5 w-40 rounded-full bg-gray-200 overflow-hidden shrink-0"><div class="bg-teal-500 h-full" style="width:'+(i/t*100)+'%"></div><div class="bg-amber-400 h-full" style="width:'+(p/t*100)+'%"></div></div>'+
-        '<span class="text-sm text-gray-500 whitespace-nowrap w-24 text-right">'+i+'/'+t+' · '+Math.round(pct)+'%</span>'+
+        '<div class="hidden sm:flex h-2.5 w-40 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden shrink-0"><div class="bg-teal-500 h-full" style="width:'+(i/t*100)+'%"></div><div class="bg-amber-400 h-full" style="width:'+(p/t*100)+'%"></div></div>'+
+        '<span class="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap w-24 text-right">'+i+'/'+t+' · '+Math.round(pct)+'%</span>'+
       '</div>'+
-      '<div class="dbody overflow-x-auto border-t border-gray-100"><table class="w-full text-left">'+
-        '<thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide sortable">'+
+      '<div class="dbody overflow-x-auto border-t border-gray-100 dark:border-gray-700"><table class="w-full text-left">'+
+        '<thead class="bg-gray-50 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide sortable">'+
         '<tr>'+
           '<th data-c="action" class="py-2.5 px-4 font-semibold">Action<span class="arr"></span></th>'+
           '<th data-c="type" class="py-2.5 px-4 font-semibold">Type<span class="arr"></span></th>'+
           '<th data-c="status" class="py-2.5 px-4 font-semibold">Status<span class="arr"></span></th>'+
           '<th data-c="ep" class="py-2.5 px-4 font-semibold">API Endpoint<span class="arr"></span></th>'+
           '<th class="py-2.5 px-4 font-semibold">Author / PR</th>'+
-        '</tr></thead><tbody class="divide-y divide-gray-100">'+rows+'</tbody></table></div></div>';
+        '</tr></thead><tbody class="divide-y divide-gray-100 dark:divide-gray-700">'+rows+'</tbody></table></div></div>';
   }
   list.innerHTML=html;
   document.getElementById('f-domain').innerHTML=opts;
@@ -390,6 +401,12 @@ document.querySelectorAll('#sort button').forEach(b=>b.onclick=()=>{
 document.getElementById('expand').onclick=()=>document.querySelectorAll('.domain').forEach(d=>d.classList.remove('col'));
 document.getElementById('collapse').onclick=()=>document.querySelectorAll('.domain').forEach(d=>d.classList.add('col'));
 document.addEventListener('click',e=>{const th=e.target.closest('th[data-c]');if(th)sortTable(th);});
+
+// dark mode toggle (persisted; system preference honoured on first load via the <head> script)
+const themeBtn=document.getElementById('theme');
+function syncTheme(){themeBtn.textContent=document.documentElement.classList.contains('dark')?'☀️':'🌙';}
+themeBtn.onclick=()=>{const d=document.documentElement.classList.toggle('dark');try{localStorage.setItem('theme',d?'dark':'light');}catch(e){}syncTheme();};
+syncTheme();
 
 setStats();render();sortDomains();applyFilter();
 if(window.HSStaticMethods) window.HSStaticMethods.autoInit();
