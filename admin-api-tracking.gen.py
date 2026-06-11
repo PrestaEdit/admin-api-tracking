@@ -219,6 +219,17 @@ TEMPLATE = r'''<!DOCTYPE html>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 pb-20">
 
+  <!-- stat cards: endpoints (always visible, outside the tabs) -->
+  <h2 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-6 mb-2">Endpoints</h2>
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-total" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Total</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-impl" class="text-2xl font-bold text-teal-600 dark:text-teal-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Implemented</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-prog" class="text-2xl font-bold text-amber-500 dark:text-amber-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">In progress</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-miss" class="text-2xl font-bold text-red-600 dark:text-red-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Missing</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-pct" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Progress</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-proj" class="text-2xl font-bold text-indigo-400 dark:text-indigo-300">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Projected</div></div>
+  </div>
+
   <!-- overall progress -->
   <div class="mt-4">
     <div class="flex h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
@@ -333,17 +344,7 @@ TEMPLATE = r'''<!DOCTYPE html>
   <!-- panel: statistics -->
   <div data-panel="stats" class="hide">
 
-    <h2 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">Endpoints</h2>
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-total" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Total</div></div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-impl" class="text-2xl font-bold text-teal-600 dark:text-teal-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Implemented</div></div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-prog" class="text-2xl font-bold text-amber-500 dark:text-amber-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">In progress</div></div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-miss" class="text-2xl font-bold text-red-600 dark:text-red-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Missing</div></div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-pct" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Progress</div></div>
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-proj" class="text-2xl font-bold text-indigo-400 dark:text-indigo-300">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Projected</div></div>
-    </div>
-
-    <h2 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-6 mb-2">Domains &amp; contributors</h2>
+    <h2 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">Domains &amp; contributors</h2>
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-domains" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Domains</div></div>
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-done" class="text-2xl font-bold text-teal-600 dark:text-teal-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Fully done (100%)</div></div>
