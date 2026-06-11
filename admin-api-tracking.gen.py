@@ -183,7 +183,14 @@ TEMPLATE = r'''<!DOCTYPE html>
   .domain.col .dbody{display:none}
   .domain.col .caret{transform:rotate(-90deg)}
   .caret{transition:transform .15s ease}
-  .seg-btn.on{background-color:#2563eb;color:#fff;border-color:#2563eb;z-index:1}
+  .seg-btn{transition:background-color .12s ease,color .12s ease,border-color .12s ease}
+  .seg-btn.on{background-color:#4f46e5;color:#fff;border-color:#4f46e5;z-index:1}
+  /* colour-coded active states, coherent with the status & type badges */
+  #f-status .seg-btn.on[data-v="implemented"]{background-color:#0d9488;border-color:#0d9488}
+  #f-status .seg-btn.on[data-v="in_progress"]{background-color:#d97706;border-color:#d97706}
+  #f-status .seg-btn.on[data-v="missing"]{background-color:#dc2626;border-color:#dc2626}
+  #f-type .seg-btn.on[data-v="Command"]{background-color:#2563eb;border-color:#2563eb}
+  #f-type .seg-btn.on[data-v="Query"]{background-color:#7c3aed;border-color:#7c3aed}
   .sortable .arr{font-size:9px;opacity:.6}
   [data-c]{cursor:pointer;user-select:none}
 </style>
@@ -235,44 +242,82 @@ TEMPLATE = r'''<!DOCTYPE html>
   </div>
 
   <!-- controls -->
-  <div class="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mt-6 bg-gray-50/85 dark:bg-gray-900/85 backdrop-blur border-b border-gray-200 dark:border-gray-700 space-y-3">
-    <div class="flex flex-wrap gap-2 items-center">
-      <input id="q" placeholder="Search action, endpoint, domain or contributor…" autocomplete="off"
-        class="grow min-w-56 py-2 px-3 block rounded-lg text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-500 focus:ring-blue-500">
-      <select id="f-domain" class="py-2 pe-9 ps-3 block rounded-lg text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-blue-500 focus:ring-blue-500"><option value="all">All domains</option></select>
-      <select id="f-author" class="py-2 pe-9 ps-3 block rounded-lg text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-blue-500 focus:ring-blue-500"><option value="all">All PR authors</option></select>
-      <span class="ms-auto text-sm text-gray-500 dark:text-gray-400" id="count"></span>
-    </div>
-    <div class="flex flex-wrap gap-x-4 gap-y-2 items-center">
-      <div class="flex items-center gap-2">
-        <span class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Status</span>
-        <div class="inline-flex rounded-lg shadow-sm" id="f-status">
-          <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-s-lg">All</button>
-          <button data-v="implemented" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Implemented</button>
-          <button data-v="in_progress" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">In progress</button>
-          <button data-v="missing" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg">Missing</button>
+  <div class="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mt-6 bg-gray-50/85 dark:bg-gray-900/85 backdrop-blur border-b border-gray-200 dark:border-gray-700">
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-3 sm:p-4 space-y-4">
+
+      <!-- search + result count -->
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="relative grow min-w-60">
+          <div class="absolute inset-y-0 start-0 flex items-center ps-3 pointer-events-none text-gray-400 dark:text-gray-500">
+            <svg class="size-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"/></svg>
+          </div>
+          <input id="q" type="text" placeholder="Search action, endpoint, domain or contributor…" autocomplete="off"
+            class="block w-full py-2 ps-10 pe-9 rounded-lg text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-indigo-500 focus:ring-indigo-500">
+          <button id="q-clear" type="button" title="Clear search" class="hidden absolute inset-y-0 end-0 flex items-center pe-3 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+            <svg class="size-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>
+          </button>
         </div>
+        <span id="count" class="inline-flex items-center gap-x-1.5 py-1.5 px-3 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 whitespace-nowrap"></span>
       </div>
-      <div class="flex items-center gap-2">
-        <span class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Type</span>
-        <div class="inline-flex rounded-lg shadow-sm" id="f-type">
-          <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-s-lg">All</button>
-          <button data-v="Command" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Commands</button>
-          <button data-v="Query" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg">Queries</button>
+
+      <hr class="border-gray-100 dark:border-gray-700">
+
+      <!-- filters & controls -->
+      <div class="flex flex-wrap gap-x-6 gap-y-4 items-end">
+
+        <div class="flex flex-col gap-1.5">
+          <label for="f-domain" class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Domain</label>
+          <select id="f-domain" class="py-2 pe-9 ps-3 block rounded-lg text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-indigo-500 focus:ring-indigo-500"><option value="all">All domains</option></select>
         </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <span class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Sort</span>
-        <div class="inline-flex rounded-lg shadow-sm" id="sort">
-          <button data-k="name" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-s-lg">Name <span class="arr">▲</span></button>
-          <button data-k="pct" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Progress <span class="arr"></span></button>
-          <button data-k="total" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Total <span class="arr"></span></button>
-          <button data-k="missing" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Missing <span class="arr"></span></button>
-          <button data-k="prog" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg">In&nbsp;progress <span class="arr"></span></button>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="f-author" class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">PR author</label>
+          <select id="f-author" class="py-2 pe-9 ps-3 block rounded-lg text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:border-indigo-500 focus:ring-indigo-500"><option value="all">All PR authors</option></select>
         </div>
+
+        <div class="flex flex-col gap-1.5">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Status</span>
+          <div class="inline-flex rounded-lg shadow-sm" id="f-status">
+            <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-s-lg">All</button>
+            <button data-v="implemented" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Implemented</button>
+            <button data-v="in_progress" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">In progress</button>
+            <button data-v="missing" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg">Missing</button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Type</span>
+          <div class="inline-flex rounded-lg shadow-sm" id="f-type">
+            <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-s-lg">All</button>
+            <button data-v="Command" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Commands</button>
+            <button data-v="Query" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg">Queries</button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Sort by</span>
+          <div class="inline-flex rounded-lg shadow-sm" id="sort">
+            <button data-k="name" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-s-lg">Name <span class="arr">▲</span></button>
+            <button data-k="pct" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Progress <span class="arr"></span></button>
+            <button data-k="total" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Total <span class="arr"></span></button>
+            <button data-k="missing" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Missing <span class="arr"></span></button>
+            <button data-k="prog" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg">In&nbsp;progress <span class="arr"></span></button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">View</span>
+          <div class="inline-flex rounded-lg shadow-sm">
+            <button id="expand" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-s-lg">Expand all</button>
+            <button id="collapse" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px rounded-e-lg">Collapse all</button>
+          </div>
+        </div>
+
+        <button id="reset" type="button" class="ms-auto self-end inline-flex items-center gap-1.5 py-1.5 px-3 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+          <svg class="size-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4v3.5H16"/></svg>
+          Reset
+        </button>
       </div>
-      <button id="expand" class="py-1.5 px-3 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Expand all</button>
-      <button id="collapse" class="py-1.5 px-3 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Collapse all</button>
     </div>
   </div>
 
@@ -422,11 +467,23 @@ function segWire(id, set){
   });
 }
 
-document.getElementById('q').addEventListener('input',e=>{fQ=e.target.value.trim().toLowerCase();applyFilter();});
+const qEl=document.getElementById('q'), qClear=document.getElementById('q-clear');
+qEl.addEventListener('input',e=>{fQ=e.target.value.trim().toLowerCase();qClear.classList.toggle('hidden', !e.target.value);applyFilter();});
+qClear.onclick=()=>{qEl.value='';fQ='';qClear.classList.add('hidden');applyFilter();qEl.focus();};
 document.getElementById('f-domain').addEventListener('change',e=>{fDomain=e.target.value;applyFilter();});
 document.getElementById('f-author').addEventListener('change',e=>{fAuthor=e.target.value;applyFilter();});
 segWire('f-status', b=>{fStatus=b.dataset.v;applyFilter();});
 segWire('f-type', b=>{fType=b.dataset.v;applyFilter();});
+
+function setSeg(id,val){document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on', b.dataset.v===val));}
+document.getElementById('reset').onclick=()=>{
+  fQ='';fDomain='all';fAuthor='all';fStatus='all';fType='all';
+  qEl.value='';qClear.classList.add('hidden');
+  document.getElementById('f-domain').value='all';
+  document.getElementById('f-author').value='all';
+  setSeg('f-status','all');setSeg('f-type','all');
+  applyFilter();
+};
 document.querySelectorAll('#sort button').forEach(b=>b.onclick=()=>{
   const k=b.dataset.k;
   if(sortKey===k){sortDir*=-1;}else{sortKey=k;sortDir=(k==='name')?1:-1;}
