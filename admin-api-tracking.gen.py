@@ -193,6 +193,12 @@ TEMPLATE = r'''<!DOCTYPE html>
   #f-type .seg-btn.on[data-v="Query"]{background-color:#7c3aed;border-color:#7c3aed}
   .sortable .arr{font-size:9px;opacity:.6}
   [data-c]{cursor:pointer;user-select:none}
+  .tab-btn{border-bottom:2px solid transparent;color:#6b7280;margin-bottom:-1px;cursor:pointer}
+  .tab-btn:hover{color:#374151}
+  .tab-btn.tab-on{border-bottom-color:#4f46e5;color:#4f46e5;font-weight:600}
+  .dark .tab-btn{color:#9ca3af}
+  .dark .tab-btn:hover{color:#e5e7eb}
+  .dark .tab-btn.tab-on{color:#818cf8;border-bottom-color:#818cf8}
 </style>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 antialiased">
@@ -213,17 +219,6 @@ TEMPLATE = r'''<!DOCTYPE html>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 pb-20">
 
-  <!-- stat cards: endpoints -->
-  <h2 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-6 mb-2">Endpoints</h2>
-  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-total" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Total</div></div>
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-impl" class="text-2xl font-bold text-teal-600 dark:text-teal-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Implemented</div></div>
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-prog" class="text-2xl font-bold text-amber-500 dark:text-amber-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">In progress</div></div>
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-miss" class="text-2xl font-bold text-red-600 dark:text-red-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Missing</div></div>
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-pct" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Progress</div></div>
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-proj" class="text-2xl font-bold text-indigo-400 dark:text-indigo-300">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Projected</div></div>
-  </div>
-
   <!-- overall progress -->
   <div class="mt-4">
     <div class="flex h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
@@ -237,24 +232,22 @@ TEMPLATE = r'''<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- stat cards: domains & contributors -->
-  <h2 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-6 mb-2">Domains &amp; contributors</h2>
-  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-domains" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Domains</div></div>
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-done" class="text-2xl font-bold text-teal-600 dark:text-teal-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Fully done (100%)</div></div>
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-empty" class="text-2xl font-bold text-red-600 dark:text-red-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Not started (0%)</div></div>
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-prs" class="text-2xl font-bold text-amber-500 dark:text-amber-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Open PRs</div></div>
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-contrib" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Contributors</div></div>
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-split" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Commands / Queries</div></div>
-  </div>
-
   <!-- info note (Preline soft alert) -->
   <div class="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900 border-s-4 border-s-blue-500 text-blue-800 dark:text-blue-200 rounded-lg p-4 text-sm">
     <b>Auto-generated __DATE__.</b>
   </div>
 
+  <!-- tabs -->
+  <div class="mt-6 flex gap-1 border-b border-gray-200 dark:border-gray-700">
+    <button data-tab="endpoints" class="tab-btn px-4 py-2.5 text-sm">Endpoints</button>
+    <button data-tab="stats" class="tab-btn px-4 py-2.5 text-sm">Statistiques</button>
+  </div>
+
+  <!-- panel: endpoints -->
+  <div data-panel="endpoints">
+
   <!-- controls -->
-  <div class="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mt-6 bg-gray-50/85 dark:bg-gray-900/85 backdrop-blur border-b border-gray-200 dark:border-gray-700">
+  <div class="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 mt-4 bg-gray-50/85 dark:bg-gray-900/85 backdrop-blur border-b border-gray-200 dark:border-gray-700">
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-3 sm:p-4 space-y-4">
 
       <!-- search + result count -->
@@ -335,6 +328,38 @@ TEMPLATE = r'''<!DOCTYPE html>
 
   <div id="list" class="mt-4 space-y-3"></div>
   <div id="empty" class="hide py-16 text-center text-gray-400 dark:text-gray-500">No endpoint matches the current filters.</div>
+  </div><!-- /panel endpoints -->
+
+  <!-- panel: statistics -->
+  <div data-panel="stats" class="hide">
+
+    <h2 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-4 mb-2">Endpoints</h2>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-total" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Total</div></div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-impl" class="text-2xl font-bold text-teal-600 dark:text-teal-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Implemented</div></div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-prog" class="text-2xl font-bold text-amber-500 dark:text-amber-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">In progress</div></div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-miss" class="text-2xl font-bold text-red-600 dark:text-red-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Missing</div></div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-pct" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Progress</div></div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-proj" class="text-2xl font-bold text-indigo-400 dark:text-indigo-300">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Projected</div></div>
+    </div>
+
+    <h2 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-6 mb-2">Domains &amp; contributors</h2>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-domains" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Domains</div></div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-done" class="text-2xl font-bold text-teal-600 dark:text-teal-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Fully done (100%)</div></div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-empty" class="text-2xl font-bold text-red-600 dark:text-red-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Not started (0%)</div></div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-prs" class="text-2xl font-bold text-amber-500 dark:text-amber-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Open PRs</div></div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-contrib" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Contributors</div></div>
+      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-split" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Commands / Queries</div></div>
+    </div>
+
+    <h2 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-6 mb-2">Top contributors <span class="normal-case font-normal text-gray-400 dark:text-gray-500">(merged + in&nbsp;progress)</span></h2>
+    <div id="leaderboard" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-x-auto shadow-sm"></div>
+    <div class="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
+      <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-teal-500"></span> Implemented / merged</span>
+      <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-amber-400"></span> In progress (open PR)</span>
+    </div>
+  </div>
 </main>
 
 <footer class="border-t border-gray-200 dark:border-gray-700 py-6 text-center text-xs text-gray-400 dark:text-gray-500">
@@ -531,7 +556,49 @@ function syncTheme(){themeBtn.textContent=document.documentElement.classList.con
 themeBtn.onclick=()=>{const d=document.documentElement.classList.toggle('dark');try{localStorage.setItem('theme',d?'dark':'light');}catch(e){}syncTheme();};
 syncTheme();
 
-setStats();render();sortDomains();applyFilter();
+// Statistics tab: contributor leaderboard (counts everything — merged, in progress, discovered)
+function renderStats(){
+  const stat={};
+  for(const d of DATA.domains) for(const r of d.rows){
+    const a=r.author||r.assignee; if(!a) continue;
+    const s=stat[a]||(stat[a]={impl:0,prog:0,prs:new Set()});
+    if(r.status==='implemented') s.impl++; else if(r.status==='in_progress') s.prog++;
+    if(r.pr) s.prs.add(r.pr);
+  }
+  const list=Object.entries(stat).map(([a,s])=>({a,impl:s.impl,prog:s.prog,total:s.impl+s.prog,prs:s.prs.size}))
+    .sort((x,y)=>y.total-x.total||y.prs-x.prs||(x.a.toLowerCase()<y.a.toLowerCase()?-1:1));
+  const max=Math.max(1,...list.map(x=>x.total));
+  const body=list.map((x,idx)=>{
+    const medal=idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':'#'+(idx+1);
+    return '<tr class="border-t border-gray-100 dark:border-gray-700">'+
+      '<td class="py-2 px-4 text-sm text-gray-500 dark:text-gray-400 w-12 text-center">'+medal+'</td>'+
+      '<td class="py-2 px-4 whitespace-nowrap"><a class="inline-flex items-center gap-2 font-medium '+LINK+'" href="https://github.com/'+esc(x.a)+'" target="_blank">'+
+        '<img class="size-6 rounded-full bg-gray-200 dark:bg-gray-700" loading="lazy" src="https://github.com/'+esc(x.a)+'.png?size=48" alt="">'+esc(x.a)+'</a></td>'+
+      '<td class="py-2 px-4 w-1/2 min-w-48"><div class="flex items-center gap-2">'+
+        '<div class="grow flex h-2.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">'+
+          '<div class="bg-teal-500 h-full" style="width:'+(x.impl/max*100)+'%"></div><div class="bg-amber-400 h-full" style="width:'+(x.prog/max*100)+'%"></div></div>'+
+        '<span class="text-sm tabular-nums font-medium text-gray-700 dark:text-gray-200 w-8 text-right">'+x.total+'</span></div></td>'+
+      '<td class="py-2 px-4 text-sm tabular-nums text-teal-600 dark:text-teal-400 text-right">'+x.impl+'</td>'+
+      '<td class="py-2 px-4 text-sm tabular-nums text-amber-600 dark:text-amber-400 text-right">'+x.prog+'</td>'+
+      '<td class="py-2 px-4 text-sm tabular-nums text-gray-500 dark:text-gray-400 text-right">'+x.prs+'</td></tr>';
+  }).join('');
+  document.getElementById('leaderboard').innerHTML=
+    '<table class="w-full text-left"><thead class="bg-gray-50 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">'+
+    '<tr><th class="py-2.5 px-4 font-semibold w-12 text-center">#</th><th class="py-2.5 px-4 font-semibold">Contributor</th>'+
+    '<th class="py-2.5 px-4 font-semibold">Endpoints</th>'+
+    '<th class="py-2.5 px-4 font-semibold text-right">Done</th>'+
+    '<th class="py-2.5 px-4 font-semibold text-right">In&nbsp;prog.</th>'+
+    '<th class="py-2.5 px-4 font-semibold text-right">PRs</th></tr></thead><tbody>'+body+'</tbody></table>';
+}
+
+// tabs
+function showTab(name){
+  document.querySelectorAll('[data-panel]').forEach(p=>p.classList.toggle('hide', p.dataset.panel!==name));
+  document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('tab-on', b.dataset.tab===name));
+}
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+
+setStats();render();sortDomains();applyFilter();renderStats();showTab('endpoints');
 if(window.HSStaticMethods) window.HSStaticMethods.autoInit();
 </script>
 </body>
