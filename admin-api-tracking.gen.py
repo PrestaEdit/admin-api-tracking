@@ -231,9 +231,7 @@ TEMPLATE = r'''<!DOCTYPE html>
 
   <!-- info note (Preline soft alert) -->
   <div class="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900 border-s-4 border-s-blue-500 text-blue-800 dark:text-blue-200 rounded-lg p-4 text-sm">
-    <b>Auto-generated __DATE__.</b> Built live from issue #39630, with every referenced
-    <code class="bg-white/60 dark:bg-white/10 px-1 rounded">ps_apiresources</code> PR re-checked against GitHub (merged → Implemented, closed → Missing, open → In&nbsp;Progress),
-    and the verified PR author attached. Exact-duplicate source rows are de-duplicated. __MERGEDNOTE__
+    <b>Auto-generated __DATE__.</b>
   </div>
 
   <!-- controls -->
