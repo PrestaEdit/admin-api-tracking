@@ -213,8 +213,9 @@ TEMPLATE = r'''<!DOCTYPE html>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 pb-20">
 
-  <!-- stat cards -->
-  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-6">
+  <!-- stat cards: endpoints -->
+  <h2 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-6 mb-2">Endpoints</h2>
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-total" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Total</div></div>
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-impl" class="text-2xl font-bold text-teal-600 dark:text-teal-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Implemented</div></div>
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-prog" class="text-2xl font-bold text-amber-500 dark:text-amber-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">In progress</div></div>
@@ -234,6 +235,17 @@ TEMPLATE = r'''<!DOCTYPE html>
       <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-amber-400"></span> In progress (open PR)</span>
       <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-red-500"></span> Missing</span>
     </div>
+  </div>
+
+  <!-- stat cards: domains & contributors -->
+  <h2 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-6 mb-2">Domains &amp; contributors</h2>
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-domains" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Domains</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-done" class="text-2xl font-bold text-teal-600 dark:text-teal-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Fully done (100%)</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-empty" class="text-2xl font-bold text-red-600 dark:text-red-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Not started (0%)</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-prs" class="text-2xl font-bold text-amber-500 dark:text-amber-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Open PRs</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-contrib" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Contributors</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="m-split" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Commands / Queries</div></div>
   </div>
 
   <!-- info note (Preline soft alert) -->
@@ -415,6 +427,24 @@ function setStats(){
   $('c-pct').textContent=(i/t*100).toFixed(1)+'%';
   $('c-proj').textContent=((i+p)/t*100).toFixed(1)+'%';
   $('ov-i').style.width=(i/t*100)+'%'; $('ov-p').style.width=(p/t*100)+'%';
+  // domain & contributor KPIs computed from the dataset
+  let done=0, empty=0, cmd=0, qry=0; const prs=new Set(), authors=new Set();
+  for(const d of DATA.domains){
+    const di=d.rows.filter(r=>r.status==='implemented').length;
+    if(di===d.rows.length) done++;
+    if(di===0) empty++;
+    for(const r of d.rows){
+      if(r.type==='Command') cmd++; else qry++;
+      if(r.status==='in_progress' && r.pr) prs.add(r.pr);
+      const a=r.author||r.assignee; if(a) authors.add(a);
+    }
+  }
+  $('m-domains').textContent=DATA.domains.length;
+  $('m-done').textContent=done;
+  $('m-empty').textContent=empty;
+  $('m-prs').textContent=prs.size;
+  $('m-contrib').textContent=authors.size;
+  $('m-split').textContent=cmd+' / '+qry;
 }
 
 function sortDomains(){
