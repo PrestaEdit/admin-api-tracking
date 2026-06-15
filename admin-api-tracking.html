@@ -63,7 +63,7 @@
 
   <!-- overall progress -->
   <div class="mt-4">
-    <div class="flex h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+    <div class="flex h-3 rounded-full bg-red-500 overflow-hidden">
       <div id="ov-i" class="bg-teal-500 h-full"></div>
       <div id="ov-p" class="bg-amber-400 h-full"></div>
     </div>
@@ -258,7 +258,7 @@ function render(){
         '<span class="caret text-gray-400 text-xs">▼</span>'+
         '<span class="font-semibold text-gray-900 dark:text-gray-100">'+esc(d.name)+'</span>'+
         '<span class="grow"></span>'+
-        '<div class="hidden sm:flex h-2.5 w-40 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden shrink-0"><div class="bg-teal-500 h-full" style="width:'+(i/t*100)+'%"></div><div class="bg-amber-400 h-full" style="width:'+(p/t*100)+'%"></div></div>'+
+        '<div class="hidden sm:flex h-2.5 w-40 rounded-full bg-red-500 overflow-hidden shrink-0"><div class="bg-teal-500 h-full" style="width:'+(i/t*100)+'%"></div><div class="bg-amber-400 h-full" style="width:'+(p/t*100)+'%"></div></div>'+
         '<span class="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap w-24 text-right">'+i+'/'+t+' · '+Math.round(pct)+'%</span>'+
       '</div>'+
       '<div class="dbody overflow-x-auto border-t border-gray-100 dark:border-gray-700"><table class="w-full text-left">'+
