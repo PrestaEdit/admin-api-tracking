@@ -8,13 +8,16 @@ Pipeline (no manual steps):
   3. Collect every referenced ps_apiresources PR and query its live state via `gh`.
   4. Reconcile statuses:  PR merged -> Implemented,  PR closed (not merged) -> Missing,
      PR still open -> In Progress.  The verified PR author is attached to each row.
+  4b. Verify real coverage against the dev code: any 'Missing' row whose CQRS class is
+     already present in ps_apiresources@dev (merged under a non-obvious path the stale
+     issue never updated) is flipped to Implemented, with author credited via blame.
   5. Render a standalone, interactive HTML file styled with Preline UI / Tailwind
      (dark mode, search / filters by status, type, domain, author / sorts).
 
 Requirements at runtime: python3 + an authenticated `gh` CLI.
 Usage: python3 admin-api-tracking.gen.py [output.html]
 """
-import json, re, subprocess, sys, os
+import json, re, subprocess, sys, os, io, tarfile
 from datetime import datetime, timezone
 
 REPO_CORE = "PrestaShop/PrestaShop"
@@ -151,6 +154,76 @@ def discover_unlisted_prs(domains, referenced):
                         r['author'] = r['assignee'] = author
                         linked.append((num, action, author))
     return linked
+
+
+RES_DIR = "src/ApiPlatform/Resources/"
+
+
+def fetch_dev_resources():
+    """Download the ps_apiresources@dev tarball once (single REST call, works with the
+    Actions GITHUB_TOKEN on this public repo) and return {relative_path: file_content}
+    for every PHP file under src/ApiPlatform/Resources/. Returns {} on any failure so the
+    daily job never breaks on this best-effort step."""
+    try:
+        out = subprocess.run(["gh", "api", f"repos/{REPO_API}/tarball/dev"],
+                             capture_output=True, timeout=120)
+        if out.returncode != 0:
+            raise RuntimeError(out.stderr.decode("utf-8", "replace"))
+        files = {}
+        with tarfile.open(fileobj=io.BytesIO(out.stdout), mode="r:gz") as tar:
+            for m in tar.getmembers():
+                if not (m.isfile() and m.name.endswith(".php")):
+                    continue
+                # strip the tarball's top-level "<owner>-<repo>-<sha>/" prefix
+                rel = m.name.split("/", 1)[1] if "/" in m.name else m.name
+                if RES_DIR not in rel:
+                    continue
+                rel = rel[rel.index(RES_DIR):]
+                f = tar.extractfile(m)
+                if f is not None:
+                    files[rel] = f.read().decode("utf-8", "replace")
+        return files
+    except Exception as e:
+        sys.stderr.write(f"warn: fetch dev resources: {e}\n")
+        return {}
+
+
+def blame_author(path):
+    """Login of the most recent committer to touch a dev file (REST, token-safe)."""
+    try:
+        d = gh_json(["api", f"repos/{REPO_API}/commits?path={path}&sha=dev&per_page=1"])
+        if d:
+            return ((d[0].get("author") or {}).get("login")
+                    or (d[0].get("commit", {}).get("author") or {}).get("name"))
+    except Exception as e:
+        sys.stderr.write(f"warn: blame {path}: {e}\n")
+    return None
+
+
+def discover_implemented_in_code(domains):
+    """Catch FALSE 'Missing' rows: endpoints already merged into ps_apiresources@dev but
+    under non-obvious paths/names the stale issue never updated (lesson from PR #241 —
+    AttributeGroup/CustomerGroup were already done). For each Missing row, if its CQRS
+    class name appears in a dev Resource file, flip it to Implemented, link the file, and
+    credit the file's latest committer via blame."""
+    files = fetch_dev_resources()
+    if not files:
+        return []
+    rescued = []
+    for d in domains:
+        for r in d['rows']:
+            if r['status'] != 'missing':
+                continue
+            pat = re.compile(r'\b' + re.escape(r['action']) + r'\b')
+            hit = next((p for p, c in files.items() if pat.search(c)), None)
+            if not hit:
+                continue
+            r['status'] = 'implemented'
+            r['in_code'] = True
+            r['src'] = hit
+            r['author'] = r['assignee'] = blame_author(hit)
+            rescued.append((d['name'], r['action'], hit))
+    return rescued
 
 
 def build(domains, generated_at, merged_note):
@@ -395,6 +468,9 @@ function buildRow(r){
     const name = author ? '<a class="'+LINK+'" href="https://github.com/'+esc(author)+'" target="_blank">'+esc(author)+'</a> / ' : '';
     const merged = r.merged_pr ? ' <span class="'+BADGE+' bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300">merged</span>' : '';
     who = name+'<a class="'+LINK+'" href="'+prUrl(r.pr)+'" target="_blank">PR #'+r.pr+'</a>'+merged;
+  } else if(r.in_code){
+    const name = author ? '<a class="'+LINK+'" href="https://github.com/'+esc(author)+'" target="_blank">'+esc(author)+'</a> / ' : '';
+    who = name+'<a class="'+BADGE+' bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300" href="https://github.com/PrestaShop/ps_apiresources/blob/dev/'+esc(r.src||'')+'" target="_blank" title="Already implemented in dev under a non-obvious path">in&nbsp;code</a>';
   }
   const ep = r.endpoint ? '<code class="'+CODE+'">'+esc(r.endpoint)+'</code>' : '<span class="text-gray-300 dark:text-gray-600">—</span>';
   const tb = r.type==='Command'?'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300':'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-300';
@@ -611,6 +687,7 @@ def main():
     domains = parse(body)
     referenced = {r['pr'] for d in domains for r in d['rows'] if r['pr']}
     _info, merged, closed = reconcile(domains)
+    in_code = discover_implemented_in_code(domains)
     discovered = discover_unlisted_prs(domains, referenced)
     note = ""
     if merged:
@@ -623,6 +700,9 @@ def main():
         prs = sorted({pr for pr, _, _ in discovered})
         note += " " + f"<b>Discovered {len(prs)} open PR(s) not yet in the issue:</b> " + \
                 ", ".join(f"#{p}" for p in prs) + "."
+    if in_code:
+        acts = ", ".join(f"{dom} <code>{act}</code>" for dom, act, _ in in_code)
+        note += " " + f"<b>Found {len(in_code)} already implemented in dev (issue still listed Missing):</b> " + acts + "."
     if not note:
         note = "No PR status changes since the source snapshot."
     stamp = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M %Z")
@@ -638,6 +718,8 @@ def main():
         print("  reverted (closed):", closed)
     if discovered:
         print("  discovered unlisted PRs:", discovered)
+    if in_code:
+        print("  found implemented in dev code:", in_code)
 
 
 if __name__ == "__main__":
