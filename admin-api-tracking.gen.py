@@ -328,6 +328,8 @@ TEMPLATE = r'''<!DOCTYPE html>
   .dark .tab-btn{color:#9ca3af}
   .dark .tab-btn:hover{color:#e5e7eb}
   .dark .tab-btn.tab-on{color:#818cf8;border-bottom-color:#818cf8}
+  .note code{background:rgb(0 0 0/.06);padding:.05rem .35rem;border-radius:.25rem;font-size:.85em;white-space:nowrap}
+  .dark .note code{background:rgb(255 255 255/.10)}
 </style>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 antialiased">
@@ -372,9 +374,13 @@ TEMPLATE = r'''<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- info note (Preline soft alert) -->
-  <div class="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900 border-s-4 border-s-blue-500 text-blue-800 dark:text-blue-200 rounded-lg p-4 text-sm">
-    <b>Auto-generated __DATE__.</b> __MERGEDNOTE__
+  <!-- status note -->
+  <div class="note mt-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-4 sm:p-5 text-sm text-gray-600 dark:text-gray-300">
+    <div class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+      <span class="relative flex size-2" title="Auto-refreshed daily"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-60"></span><span class="relative inline-flex size-2 rounded-full bg-teal-500"></span></span>
+      Auto-generated __DATE__
+    </div>
+    <div class="mt-3 space-y-2">__MERGEDNOTE__</div>
   </div>
 
   <!-- tabs -->
@@ -776,22 +782,45 @@ def main():
     _info, merged, closed = reconcile(domains)
     in_code = discover_implemented_in_code(domains)
     discovered = discover_unlisted_prs(domains, referenced)
-    note = ""
+    # Each status fact is rendered as its own labelled row (pill + content) so the
+    # banner reads as a stacked list rather than one run-on paragraph.
+    PILL = ("shrink-0 inline-flex items-center gap-1 justify-center min-w-[5.75rem] "
+            "rounded-full px-2.5 py-0.5 text-[11px] font-semibold leading-5 ")
+    HUE = {
+        'teal':   'bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300',
+        'red':    'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300',
+        'amber':  'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+        'indigo': 'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-300',
+        'slate':  'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+    }
+    ICON = {
+        'check':  'm4.5 12.75 6 6 9-13.5',
+        'undo':   'M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3',
+        'search': 'm21 21-4.35-4.35M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z',
+        'code':   'M17.25 6.75 22.5 12l-5.25 5.25M6.75 17.25 1.5 12l5.25-5.25M14.25 3.75l-4.5 16.5',
+        'minus':  'M15 12H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+    }
+    def seg(label, hue, icon, body):
+        ico = (f'<svg class="size-3 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" '
+               f'viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">'
+               f'<path stroke-linecap="round" stroke-linejoin="round" d="{ICON[icon]}"/></svg>')
+        return (f'<div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">'
+                f'<span class="{PILL}{HUE[hue]}">{ico}{label}</span>'
+                f'<span class="flex-1 min-w-0">{body}</span></div>')
+    segs = []
     if merged:
         items = ", ".join(f"#{pr} ({dom} <code>{act}</code>)" for dom, act, pr in merged)
-        note = f"<b>Merged since last issue snapshot:</b> {items}."
+        segs.append(seg("Merged", "teal", "check", f"{len(merged)} since last issue snapshot — {items}."))
     if closed:
-        note += " " + f"<b>Reverted to Missing (PR closed):</b> " + \
-                ", ".join(f"{dom} <code>{act}</code>" for dom, act in closed) + "."
+        body = ", ".join(f"{dom} <code>{act}</code>" for dom, act in closed)
+        segs.append(seg("Reverted", "red", "undo", f"{len(closed)} back to Missing (PR closed) — {body}."))
     if discovered:
         prs = sorted({pr for pr, _, _ in discovered})
-        note += " " + f"<b>Discovered {len(prs)} open PR(s) not yet in the issue:</b> " + \
-                ", ".join(f"#{p}" for p in prs) + "."
+        body = ", ".join(f"#{p}" for p in prs)
+        segs.append(seg("Open PRs", "amber", "search", f"{len(prs)} discovered, not yet in the issue — {body}."))
     if in_code:
         acts = ", ".join(f"{dom} <code>{act}</code>" for dom, act, _ in in_code)
-        note += " " + f"<b>Found {len(in_code)} already implemented in dev (issue still listed Missing):</b> " + acts + "."
-    if not note:
-        note = "No PR status changes since the source snapshot."
+        segs.append(seg("In dev", "indigo", "code", f"{len(in_code)} already implemented, issue still listed Missing — {acts}."))
     miss_ver = {}
     for d in domains:
         for r in d['rows']:
@@ -804,7 +833,11 @@ def main():
         if miss_ver.get(lbl):
             parts.append(f"{miss_ver[lbl]} {txt}")
     if parts:
-        note += " <b>Missing endpoints by min version:</b> " + ", ".join(parts) + "."
+        segs.append(seg("Missing", "slate", "minus", "by min version — " + ", ".join(parts) + "."))
+    if not segs:
+        segs.append('<div class="text-gray-500 dark:text-gray-400">'
+                    'No PR status changes since the source snapshot.</div>')
+    note = "".join(segs)
     stamp = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M %Z")
     html, (total, impl, prog, miss) = build(domains, stamp, note)
     with open(OUT, "w") as f:
