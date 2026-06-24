@@ -226,6 +226,58 @@ def discover_implemented_in_code(domains):
     return rescued
 
 
+# Earliest PS version whose core CQRS class exists, by label (oldest first).
+# 9.0 = buildable NOW (the ps_apiresources CI matrix floor is 9.0.3);
+# 9.1 = class introduced in 9.1, only buildable once 9.0.x is dropped from the matrix;
+# dev = class only on develop (future).
+CORE_REFS = [("9.0", "9.0.3"), ("9.1", "9.1.x"), ("dev", "develop")]
+
+
+def _core_domain_tree_sha(ref):
+    """SHA of the src/Core/Domain tree at a ref (one cheap REST call, token-safe)."""
+    try:
+        d = gh_json(["api", f"repos/{REPO_CORE}/contents/src/Core?ref={ref}"])
+    except Exception as e:
+        sys.stderr.write(f"warn: core tree {ref}: {e}\n")
+        return None
+    return next((e["sha"] for e in d
+                 if e.get("name") == "Domain" and e.get("type") == "dir"), None)
+
+
+def _core_class_names(ref):
+    """Set of every Command/Query class short-name under src/Core/Domain at a ref.
+    Fetches only the Domain subtree (~2.6k entries, never truncated), not the whole repo."""
+    sha = _core_domain_tree_sha(ref)
+    if not sha:
+        return set()
+    try:
+        d = gh_json(["api", f"repos/{REPO_CORE}/git/trees/{sha}?recursive=1"])
+    except Exception as e:
+        sys.stderr.write(f"warn: core subtree {ref}: {e}\n")
+        return set()
+    names = set()
+    for t in d.get("tree", []):
+        m = re.search(r'(?:^|/)(?:Command|Query)/([A-Za-z]+)\.php$', t.get("path", ""))
+        if m:
+            names.add(m.group(1))
+    return names
+
+
+def annotate_versions(domains):
+    """Tag every row with the EARLIEST PS version whose core CQRS class exists, so the page
+    shows what is implementable under which version constraint. Best-effort: on any fetch
+    failure the version stays None (rendered as 'n/a') and the rest of the page is unaffected.
+    Returns the {className: label} index for logging."""
+    idx = {}
+    for label, ref in reversed(CORE_REFS):   # newest->oldest so the oldest (min) label wins
+        for n in _core_class_names(ref):
+            idx[n] = label
+    for d in domains:
+        for r in d['rows']:
+            r['version'] = idx.get(r['action'])
+    return idx
+
+
 def build(domains, generated_at, merged_note):
     domains.sort(key=lambda d: d['name'].lower())
     total = sum(len(d['rows']) for d in domains)
@@ -264,6 +316,10 @@ TEMPLATE = r'''<!DOCTYPE html>
   #f-status .seg-btn.on[data-v="missing"]{background-color:#dc2626;border-color:#dc2626}
   #f-type .seg-btn.on[data-v="Command"]{background-color:#2563eb;border-color:#2563eb}
   #f-type .seg-btn.on[data-v="Query"]{background-color:#7c3aed;border-color:#7c3aed}
+  #f-version .seg-btn.on[data-v="9.0"]{background-color:#059669;border-color:#059669}
+  #f-version .seg-btn.on[data-v="9.1"]{background-color:#d97706;border-color:#d97706}
+  #f-version .seg-btn.on[data-v="dev"]{background-color:#7c3aed;border-color:#7c3aed}
+  #f-version .seg-btn.on[data-v="na"]{background-color:#6b7280;border-color:#6b7280}
   .sortable .arr{font-size:9px;opacity:.6}
   [data-c]{cursor:pointer;user-select:none}
   .tab-btn{border-bottom:2px solid transparent;color:#6b7280;margin-bottom:-1px;cursor:pointer}
@@ -318,7 +374,7 @@ TEMPLATE = r'''<!DOCTYPE html>
 
   <!-- info note (Preline soft alert) -->
   <div class="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900 border-s-4 border-s-blue-500 text-blue-800 dark:text-blue-200 rounded-lg p-4 text-sm">
-    <b>Auto-generated __DATE__.</b>
+    <b>Auto-generated __DATE__.</b> __MERGEDNOTE__
   </div>
 
   <!-- tabs -->
@@ -380,6 +436,17 @@ TEMPLATE = r'''<!DOCTYPE html>
             <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-s-lg">All</button>
             <button data-v="Command" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Commands</button>
             <button data-v="Query" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg">Queries</button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Min version</span>
+          <div class="inline-flex rounded-lg shadow-sm" id="f-version">
+            <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-s-lg">All</button>
+            <button data-v="9.0" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px" title="Buildable now (9.0.3 CI floor)">9.0.3+</button>
+            <button data-v="9.1" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px" title="Needs 9.0.x dropped from the CI matrix">9.1+</button>
+            <button data-v="dev" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">dev</button>
+            <button data-v="na" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg">n/a</button>
           </div>
         </div>
 
@@ -453,8 +520,21 @@ const SBADGE = {
 };
 const SDOT = {implemented:'✅', in_progress:'🚧', missing:'❌'};
 const SORD = {implemented:0, in_progress:1, missing:2};
+const VL = {'9.0':'9.0.3+', '9.1':'9.1+', 'dev':'develop', 'na':'n/a'};
+const VBADGE = {
+  '9.0':'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
+  '9.1':'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+  'dev':'bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-300',
+  'na':'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+};
+const VTITLE = {
+  '9.0':'Core CQRS class exists in 9.0.3 — buildable now (matches the ps_apiresources CI floor)',
+  '9.1':'Introduced in 9.1 — buildable once 9.0.x is dropped from the CI matrix',
+  'dev':'Only present on develop — future',
+  'na':'CQRS class not located in core@develop (name mismatch, sub-domain, or non-CQRS row)'
+};
 const esc = s => (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let fStatus='all', fType='all', fQ='', fDomain='all', fAuthor='all';
+let fStatus='all', fType='all', fQ='', fDomain='all', fAuthor='all', fVersion='all';
 let sortKey='name', sortDir=1;
 const prUrl = n => 'https://github.com/PrestaShop/ps_apiresources/pull/'+n;
 const BADGE = 'inline-flex items-center gap-x-1 py-0.5 px-2 rounded-full text-xs font-medium';
@@ -474,12 +554,15 @@ function buildRow(r){
   }
   const ep = r.endpoint ? '<code class="'+CODE+'">'+esc(r.endpoint)+'</code>' : '<span class="text-gray-300 dark:text-gray-600">—</span>';
   const tb = r.type==='Command'?'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300':'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-300';
+  const ver = r.version || 'na';
+  const vb = '<span class="'+BADGE+' '+VBADGE[ver]+'" title="'+esc(VTITLE[ver])+'">'+VL[ver]+'</span>';
   return '<tr class="row hover:bg-gray-50 dark:hover:bg-gray-700/40" data-s="'+r.status+'" data-t="'+r.type+'"'+
     ' data-action="'+esc(r.action.toLowerCase())+'" data-ep="'+esc((r.endpoint||'').toLowerCase())+'"'+
-    ' data-author="'+esc(author)+'" data-sord="'+SORD[r.status]+'"'+
+    ' data-author="'+esc(author)+'" data-sord="'+SORD[r.status]+'" data-version="'+ver+'"'+
     ' data-k="'+esc((r.action+' '+(r.endpoint||'')+' '+author).toLowerCase())+'">'+
     '<td class="py-2.5 px-4 align-top"><code class="'+CODE+'">'+esc(r.action)+'</code></td>'+
     '<td class="py-2.5 px-4 align-top"><span class="'+BADGE+' '+tb+'">'+r.type+'</span></td>'+
+    '<td class="py-2.5 px-4 align-top">'+vb+'</td>'+
     '<td class="py-2.5 px-4 align-top"><span class="'+BADGE+' '+SBADGE[r.status]+'">'+SDOT[r.status]+' '+SL[r.status]+'</span></td>'+
     '<td class="py-2.5 px-4 align-top">'+ep+'</td>'+
     '<td class="py-2.5 px-4 align-top text-sm text-gray-600 dark:text-gray-300">'+(who||'<span class="text-gray-300 dark:text-gray-600">—</span>')+'</td></tr>';
@@ -511,6 +594,7 @@ function render(){
         '<tr>'+
           '<th data-c="action" class="py-2.5 px-4 font-semibold">Action<span class="arr"></span></th>'+
           '<th data-c="type" class="py-2.5 px-4 font-semibold">Type<span class="arr"></span></th>'+
+          '<th data-c="version" class="py-2.5 px-4 font-semibold">Min&nbsp;ver<span class="arr"></span></th>'+
           '<th data-c="status" class="py-2.5 px-4 font-semibold">Status<span class="arr"></span></th>'+
           '<th data-c="ep" class="py-2.5 px-4 font-semibold">API Endpoint<span class="arr"></span></th>'+
           '<th class="py-2.5 px-4 font-semibold">Author / PR</th>'+
@@ -568,6 +652,7 @@ function applyFilter(){
     dom.querySelectorAll('tr.row').forEach(tr=>{
       const ok = domOk && (fStatus==='all'||tr.dataset.s===fStatus) && (fType==='all'||tr.dataset.t===fType)
         && (fAuthor==='all'||tr.dataset.author===fAuthor)
+        && (fVersion==='all'||tr.dataset.version===fVersion)
         && (!fQ || tr.dataset.k.includes(fQ) || dom.dataset.dn.includes(fQ));
       tr.hidden=!ok; if(ok){vis++;shown++;}
     });
@@ -606,14 +691,15 @@ document.getElementById('f-domain').addEventListener('change',e=>{fDomain=e.targ
 document.getElementById('f-author').addEventListener('change',e=>{fAuthor=e.target.value;applyFilter();});
 segWire('f-status', b=>{fStatus=b.dataset.v;applyFilter();});
 segWire('f-type', b=>{fType=b.dataset.v;applyFilter();});
+segWire('f-version', b=>{fVersion=b.dataset.v;applyFilter();});
 
 function setSeg(id,val){document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on', b.dataset.v===val));}
 document.getElementById('reset').onclick=()=>{
-  fQ='';fDomain='all';fAuthor='all';fStatus='all';fType='all';
+  fQ='';fDomain='all';fAuthor='all';fStatus='all';fType='all';fVersion='all';
   qEl.value='';qClear.classList.add('hidden');
   document.getElementById('f-domain').value='all';
   document.getElementById('f-author').value='all';
-  setSeg('f-status','all');setSeg('f-type','all');
+  setSeg('f-status','all');setSeg('f-type','all');setSeg('f-version','all');
   applyFilter();
 };
 document.querySelectorAll('#sort button').forEach(b=>b.onclick=()=>{
@@ -685,6 +771,7 @@ if(window.HSStaticMethods) window.HSStaticMethods.autoInit();
 def main():
     body = fetch_issue_body()
     domains = parse(body)
+    annotate_versions(domains)
     referenced = {r['pr'] for d in domains for r in d['rows'] if r['pr']}
     _info, merged, closed = reconcile(domains)
     in_code = discover_implemented_in_code(domains)
@@ -705,6 +792,19 @@ def main():
         note += " " + f"<b>Found {len(in_code)} already implemented in dev (issue still listed Missing):</b> " + acts + "."
     if not note:
         note = "No PR status changes since the source snapshot."
+    miss_ver = {}
+    for d in domains:
+        for r in d['rows']:
+            if r['status'] == 'missing':
+                v = r.get('version') or 'n/a'
+                miss_ver[v] = miss_ver.get(v, 0) + 1
+    parts = []
+    for lbl, txt in (('9.0', 'buildable now (9.0.3)'), ('9.1', 'need 9.1'),
+                     ('dev', 'develop-only'), ('n/a', 'class not located')):
+        if miss_ver.get(lbl):
+            parts.append(f"{miss_ver[lbl]} {txt}")
+    if parts:
+        note += " <b>Missing endpoints by min version:</b> " + ", ".join(parts) + "."
     stamp = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M %Z")
     html, (total, impl, prog, miss) = build(domains, stamp, note)
     with open(OUT, "w") as f:
@@ -712,6 +812,17 @@ def main():
     print(f"[{stamp}] wrote {OUT}")
     print(f"  domains={len(domains)} total={total} impl={impl} prog={prog} miss={miss} "
           f"({impl/total*100:.1f}% done, {(impl+prog)/total*100:.1f}% projected)")
+    vc = {}
+    miss_by_ver = {}
+    for d in domains:
+        for r in d['rows']:
+            v = r.get('version') or 'n/a'
+            vc[v] = vc.get(v, 0) + 1
+            if r['status'] == 'missing':
+                miss_by_ver[v] = miss_by_ver.get(v, 0) + 1
+    print("  min-version split:", {k: vc[k] for k in sorted(vc)})
+    print("  MISSING by min-version (9.0 = buildable now):",
+          {k: miss_by_ver[k] for k in sorted(miss_by_ver)})
     if merged:
         print("  newly merged:", merged)
     if closed:
