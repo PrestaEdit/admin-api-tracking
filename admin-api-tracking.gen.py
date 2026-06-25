@@ -19,6 +19,7 @@ Usage: python3 admin-api-tracking.gen.py [output.html]
 """
 import json, re, subprocess, sys, os, io, tarfile
 from datetime import datetime, timezone
+from functools import lru_cache
 
 REPO_CORE = "PrestaShop/PrestaShop"
 REPO_API = "PrestaShop/ps_apiresources"
@@ -188,8 +189,10 @@ def fetch_dev_resources():
         return {}
 
 
+@lru_cache(maxsize=None)
 def blame_author(path):
-    """Login of the most recent committer to touch a dev file (REST, token-safe)."""
+    """Login of the most recent committer to touch a dev file (REST, token-safe).
+    Memoized: a CRUD domain shares one Resource file, so it is blamed only once."""
     try:
         d = gh_json(["api", f"repos/{REPO_API}/commits?path={path}&sha=dev&per_page=1"])
         if d:
@@ -200,13 +203,18 @@ def blame_author(path):
     return None
 
 
-def discover_implemented_in_code(domains):
+def locate_in_dev(files, action):
+    """Return the dev Resource file path whose content references the CQRS class, or None."""
+    pat = re.compile(r'\b' + re.escape(action) + r'\b')
+    return next((p for p, c in files.items() if pat.search(c)), None)
+
+
+def discover_implemented_in_code(domains, files):
     """Catch FALSE 'Missing' rows: endpoints already merged into ps_apiresources@dev but
     under non-obvious paths/names the stale issue never updated (lesson from PR #241 —
     AttributeGroup/CustomerGroup were already done). For each Missing row, if its CQRS
     class name appears in a dev Resource file, flip it to Implemented, link the file, and
     credit the file's latest committer via blame."""
-    files = fetch_dev_resources()
     if not files:
         return []
     rescued = []
@@ -214,8 +222,7 @@ def discover_implemented_in_code(domains):
         for r in d['rows']:
             if r['status'] != 'missing':
                 continue
-            pat = re.compile(r'\b' + re.escape(r['action']) + r'\b')
-            hit = next((p for p, c in files.items() if pat.search(c)), None)
+            hit = locate_in_dev(files, r['action'])
             if not hit:
                 continue
             r['status'] = 'implemented'
@@ -224,6 +231,30 @@ def discover_implemented_in_code(domains):
             r['author'] = r['assignee'] = blame_author(hit)
             rescued.append((d['name'], r['action'], hit))
     return rescued
+
+
+def attribute_implemented(domains, files):
+    """Credit an author to Implemented rows the issue listed as done WITHOUT a PR link
+    (e.g. AddCustomerAddressCommand): locate the CQRS class in the dev Resource tree and
+    blame the file's latest committer. Populates the author filter and links the source.
+    Does not change status — only fills in missing attribution."""
+    if not files:
+        return []
+    attributed = []
+    for d in domains:
+        for r in d['rows']:
+            if r['status'] != 'implemented' or r.get('author') or r.get('assignee'):
+                continue
+            hit = locate_in_dev(files, r['action'])
+            if not hit:
+                continue
+            who = blame_author(hit)
+            if not who:
+                continue
+            r['author'] = r['assignee'] = who
+            r['src'] = hit
+            attributed.append((d['name'], r['action'], who))
+    return attributed
 
 
 # Earliest PS version whose core CQRS class exists, by label (oldest first).
@@ -557,6 +588,9 @@ function buildRow(r){
   } else if(r.in_code){
     const name = author ? '<a class="'+LINK+'" href="https://github.com/'+esc(author)+'" target="_blank">'+esc(author)+'</a> / ' : '';
     who = name+'<a class="'+BADGE+' bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300" href="https://github.com/PrestaShop/ps_apiresources/blob/dev/'+esc(r.src||'')+'" target="_blank" title="Already implemented in dev under a non-obvious path">in&nbsp;code</a>';
+  } else if(author){
+    const src = r.src ? ' <a class="'+LINK+'" href="https://github.com/PrestaShop/ps_apiresources/blob/dev/'+esc(r.src)+'" target="_blank" title="Source in ps_apiresources@dev">src</a>' : '';
+    who = '<a class="'+LINK+'" href="https://github.com/'+esc(author)+'" target="_blank">'+esc(author)+'</a>'+src;
   }
   const ep = r.endpoint ? '<code class="'+CODE+'">'+esc(r.endpoint)+'</code>' : '<span class="text-gray-300 dark:text-gray-600">—</span>';
   const tb = r.type==='Command'?'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300':'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-300';
@@ -780,8 +814,10 @@ def main():
     annotate_versions(domains)
     referenced = {r['pr'] for d in domains for r in d['rows'] if r['pr']}
     _info, merged, closed = reconcile(domains)
-    in_code = discover_implemented_in_code(domains)
+    dev_files = fetch_dev_resources()
+    in_code = discover_implemented_in_code(domains, dev_files)
     discovered = discover_unlisted_prs(domains, referenced)
+    attributed = attribute_implemented(domains, dev_files)
     # Each status fact is rendered as its own labelled row (pill + content) so the
     # banner reads as a stacked list rather than one run-on paragraph.
     PILL = ("shrink-0 inline-flex items-center gap-1 justify-center min-w-[5.75rem] "
@@ -864,6 +900,8 @@ def main():
         print("  discovered unlisted PRs:", discovered)
     if in_code:
         print("  found implemented in dev code:", in_code)
+    if attributed:
+        print(f"  attributed authors to {len(attributed)} implemented endpoints via dev blame")
 
 
 if __name__ == "__main__":
