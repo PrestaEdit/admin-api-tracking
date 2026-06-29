@@ -122,13 +122,17 @@ def reconcile(domains):
 def discover_unlisted_prs(domains, referenced):
     """Catch OPEN ps_apiresources PRs the (periodically-regenerated, often-stale)
     issue table hasn't captured yet: link each to the Missing rows whose CQRS command
-    class name appears in the PR diff, flipping them to In Progress with the real author."""
+    class name appears in the PR diff, flipping them to In Progress with the real author.
+    Processed OLDEST-PR-FIRST so the original contributor wins a contested endpoint, not a
+    later duplicate (bug: SpecificPrice CRUD, proposed by @Jeremie-Kiwik in #110 in Nov 2025,
+    was credited to a newer June-2026 dup #297 because gh listed PRs newest-first)."""
     try:
         open_prs = gh_json(["pr", "list", "--repo", REPO_API, "--state", "open",
                             "--limit", "200", "--json", "number,author"])
     except Exception as e:
         sys.stderr.write(f"warn: pr list: {e}\n")
         return []
+    open_prs.sort(key=lambda p: p['number'])   # ascending = oldest first; lower # claims first
     missing_by_action = {}
     for d in domains:
         for r in d['rows']:
@@ -221,7 +225,7 @@ def discover_implemented_in_code(domains, files):
     under non-obvious paths/names the stale issue never updated (lesson from PR #241 —
     AttributeGroup/CustomerGroup were already done). For each Missing row, if its CQRS
     class name appears in a dev Resource file, flip it to Implemented, link the file, and
-    credit the file's latest committer via blame."""
+    credit the file's ORIGINAL author via blame (see blame_author)."""
     if not files:
         return []
     rescued = []
