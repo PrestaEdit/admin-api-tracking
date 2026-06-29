@@ -191,13 +191,20 @@ def fetch_dev_resources():
 
 @lru_cache(maxsize=None)
 def blame_author(path):
-    """Login of the most recent committer to touch a dev file (REST, token-safe).
+    """Login of the author who FIRST added a dev Resource file — the original implementer,
+    NOT the latest committer. A later cross-cutting edit (a URL-pluralization rename, a
+    repo-wide Rector/PHPStan rule, a reformat) must not steal credit for an endpoint
+    (bug: the /customers endpoints, added by @Jeremie-Kiwik in PR #107, were credited to
+    the author of a later scalar-types Rector commit). The commits API returns newest-first,
+    so we fetch up to 100 deep and take the OLDEST entry; these Resource files have far
+    fewer than 100 commits, so this is the true file-creation author. REST, token-safe.
     Memoized: a CRUD domain shares one Resource file, so it is blamed only once."""
     try:
-        d = gh_json(["api", f"repos/{REPO_API}/commits?path={path}&sha=dev&per_page=1"])
+        d = gh_json(["api", f"repos/{REPO_API}/commits?path={path}&sha=dev&per_page=100"])
         if d:
-            return ((d[0].get("author") or {}).get("login")
-                    or (d[0].get("commit", {}).get("author") or {}).get("name"))
+            c = d[-1]
+            return ((c.get("author") or {}).get("login")
+                    or (c.get("commit", {}).get("author") or {}).get("name"))
     except Exception as e:
         sys.stderr.write(f"warn: blame {path}: {e}\n")
     return None
