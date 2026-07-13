@@ -349,6 +349,9 @@ TEMPLATE = r'''<!DOCTYPE html>
   tr.row[hidden]{display:none}
   .domain.col .dbody{display:none}
   .domain.col .caret{transform:rotate(-90deg)}
+  #note.col #note-body{display:none}
+  #note.col #note-chev{transform:rotate(-90deg)}
+  #note:not(.col) #note-body{margin-top:.75rem}
   .caret{transition:transform .15s ease}
   .seg-btn{transition:background-color .12s ease,color .12s ease,border-color .12s ease}
   .seg-btn.on{background-color:#4f46e5;color:#fff;border-color:#4f46e5;z-index:1}
@@ -417,12 +420,13 @@ TEMPLATE = r'''<!DOCTYPE html>
   </div>
 
   <!-- status note -->
-  <div class="note mt-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-4 sm:p-5 text-sm text-gray-600 dark:text-gray-300">
-    <div class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+  <div id="note" class="note col mt-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-4 sm:p-5 text-sm text-gray-600 dark:text-gray-300">
+    <button id="note-toggle" type="button" aria-expanded="false" aria-controls="note-body" class="w-full flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
       <span class="relative flex size-2" title="Auto-refreshed daily"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-60"></span><span class="relative inline-flex size-2 rounded-full bg-teal-500"></span></span>
-      Auto-generated __DATE__
-    </div>
-    <div class="mt-3 space-y-2">__MERGEDNOTE__</div>
+      <span>Auto-generated __DATE__</span>
+      <svg id="note-chev" class="size-3.5 ms-auto transition-transform" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+    </button>
+    <div id="note-body" class="mt-3 space-y-2">__MERGEDNOTE__</div>
   </div>
 
   <!-- tabs -->
@@ -760,6 +764,8 @@ document.querySelectorAll('#sort button').forEach(b=>b.onclick=()=>{
   b.classList.add('on');b.querySelector('.arr').textContent=sortDir===1?'▲':'▼';
   sortDomains();
 });
+const noteEl=document.getElementById('note'),noteBtn=document.getElementById('note-toggle');
+noteBtn.onclick=()=>{const open=noteEl.classList.toggle('col')===false;noteBtn.setAttribute('aria-expanded',open?'true':'false');};
 document.getElementById('expand').onclick=()=>document.querySelectorAll('.domain').forEach(d=>d.classList.remove('col'));
 document.getElementById('collapse').onclick=()=>document.querySelectorAll('.domain').forEach(d=>d.classList.add('col'));
 document.addEventListener('click',e=>{const th=e.target.closest('th[data-c]');if(th)sortTable(th);});
