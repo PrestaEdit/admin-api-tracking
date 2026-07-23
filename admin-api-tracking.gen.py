@@ -119,13 +119,66 @@ def reconcile(domains):
     return info, moved_merged, moved_closed
 
 
+_RESOURCE_FILE_RE = re.compile(r'^diff --git a/(src/ApiPlatform/Resources/[^ ]+\.php)')
+# Which CQRS action prefixes/suffixes each ApiPlatform operation implies, keyed by the
+# operation shortname as it appears in `#[Op]` / `new Op(` inside a Resource file.
+_OP_TO_CANDIDATES = {
+    'PaginatedList':  lambda cls: [f'Get{cls}'],                 # class already ends in "List"
+    'GetCollection':  lambda cls: [f'Get{cls}List', f'Search{cls}'],
+    'Get':            lambda cls: [f'Get{cls}ForEditing', f'Get{cls}'],
+    'Post':           lambda cls: [f'Add{cls}Command'],
+    'Put':            lambda cls: [f'Edit{cls}Command'],
+    'Patch':          lambda cls: [f'Edit{cls}Command', f'Set{cls}StatusCommand'],
+    'Delete':         lambda cls: [f'Delete{cls}Command'],
+}
+
+
+def _candidates_from_diff(diff):
+    """Walk the diff file-by-file. For each added Resource file, note the class name and the
+    ApiPlatform operations declared inside it; from that pair, generate the likely CQRS
+    action-name candidates by naming convention. Handles ps_apiresources List endpoints
+    (QueryListProvider + Filters) where the core CQRS class name never appears in the diff —
+    e.g. TaxRuleList.php + PaginatedList → GetTaxRuleList."""
+    per_file = {}                              # path -> {'class': str|None, 'ops': set}
+    current = None
+    for ln in diff.splitlines():
+        m = _RESOURCE_FILE_RE.match(ln)
+        if m:
+            current = per_file.setdefault(m.group(1), {'class': None, 'ops': set()})
+            continue
+        if current is None or not ln.startswith('+') or ln.startswith('+++'):
+            continue
+        body = ln[1:]
+        if current['class'] is None:
+            cm = re.match(r'\s*(?:final\s+|abstract\s+)?class\s+([A-Za-z0-9_]+)', body)
+            if cm:
+                current['class'] = cm.group(1)
+        for op in _OP_TO_CANDIDATES:
+            if re.search(rf'(?:#\[|new\s+){op}\b', body):
+                current['ops'].add(op)
+    candidates = set()
+    for info in per_file.values():
+        cls = info['class']
+        if not cls:
+            continue
+        for op in info['ops']:
+            candidates.update(_OP_TO_CANDIDATES[op](cls))
+    return candidates
+
+
 def discover_unlisted_prs(domains, referenced):
     """Catch OPEN ps_apiresources PRs the (periodically-regenerated, often-stale)
     issue table hasn't captured yet: link each to the Missing rows whose CQRS command
     class name appears in the PR diff, flipping them to In Progress with the real author.
     Processed OLDEST-PR-FIRST so the original contributor wins a contested endpoint, not a
     later duplicate (bug: SpecificPrice CRUD, proposed by @Jeremie-Kiwik in #110 in Nov 2025,
-    was credited to a newer June-2026 dup #297 because gh listed PRs newest-first)."""
+    was credited to a newer June-2026 dup #297 because gh listed PRs newest-first).
+
+    Second pass — URI-template fallback: ps_apiresources List endpoints ship via
+    QueryListProvider + a Filters class, so the core CQRS class name (e.g. GetTaxRuleList)
+    never appears in the diff. Match by the row's endpoint URI + HTTP verb instead
+    (bug: PR #242 taxrules-list was flagged Missing because the diff only says
+    uriTemplate: '/tax-rules', not GetTaxRuleList)."""
     try:
         open_prs = gh_json(["pr", "list", "--repo", REPO_API, "--state", "open",
                             "--limit", "200", "--json", "number,author"])
@@ -150,14 +203,16 @@ def discover_unlisted_prs(domains, referenced):
         except Exception as e:
             sys.stderr.write(f"warn: pr diff {num}: {e}\n")
             continue
-        for action, rows in missing_by_action.items():
-            if re.search(r'\b' + re.escape(action) + r'\b', diff):
-                for r in rows:
-                    if r['status'] == 'missing':       # first PR to claim the row wins
-                        r['status'] = 'in_progress'
-                        r['pr'] = num
-                        r['author'] = r['assignee'] = author
-                        linked.append((num, action, author))
+        matched_actions = {a for a in missing_by_action
+                           if re.search(r'\b' + re.escape(a) + r'\b', diff)}
+        matched_actions |= _candidates_from_diff(diff) & set(missing_by_action)
+        for action in matched_actions:
+            for r in missing_by_action[action]:
+                if r['status'] == 'missing':       # first PR to claim the row wins
+                    r['status'] = 'in_progress'
+                    r['pr'] = num
+                    r['author'] = r['assignee'] = author
+                    linked.append((num, action, author))
     return linked
 
 
