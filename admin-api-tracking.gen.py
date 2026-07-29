@@ -30,6 +30,17 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
 STATUS_MAP = {'✅ Implemented': 'implemented', '🚧 In Progress': 'in_progress', '❌ Missing': 'missing'}
 PR_RE = re.compile(r'\[([^\]]+)\]\(https://github.com/([^)]+)\).*?/ps_apiresources/pull/(\d+)')
 
+# Endpoints explicitly ruled out by ps_apiresources maintainers — kept in the tracker
+# so future contributors don't re-propose them, but excluded from the "missing" backlog
+# (denominator for the progress %). Keyed by the CQRS action name in the issue table.
+SKIPPED = {
+    'GetEmployeeEmailById': {
+        'reason': "Redundant with GET /employees/{id} which already returns the email.",
+        'by': 'jolelievre',
+        'pr': 340,
+    },
+}
+
 
 def gh_json(args):
     out = subprocess.run(["gh"] + args, capture_output=True, text=True, timeout=60)
@@ -68,9 +79,22 @@ def parse(body):
             if key in seen:           # drop exact-duplicate generator artifacts
                 continue
             seen.add(key)
-            cur['rows'].append({'action': action, 'type': typ, 'status': status,
-                                'endpoint': endpoint, 'assignee': assignee, 'pr': pr,
-                                'author': None})
+            row = {'action': action, 'type': typ, 'status': status,
+                   'endpoint': endpoint, 'assignee': assignee, 'pr': pr,
+                   'author': None}
+            sk = SKIPPED.get(action)
+            if sk:
+                # Skipped wins over any issue-listed status: the maintainer decision is
+                # final, whether the row was Missing, In Progress or even accidentally
+                # marked Implemented. The reference PR/author is kept for traceability.
+                row['status'] = 'skipped'
+                row['skip_reason'] = sk['reason']
+                row['skip_by'] = sk.get('by')
+                if sk.get('pr'):
+                    row['pr'] = sk['pr']
+                    row['assignee'] = sk.get('by')
+                    row['author'] = sk.get('by')
+            cur['rows'].append(row)
     return domains
 
 
@@ -381,12 +405,14 @@ def build(domains, generated_at, merged_note):
     impl = sum(1 for d in domains for r in d['rows'] if r['status'] == 'implemented')
     prog = sum(1 for d in domains for r in d['rows'] if r['status'] == 'in_progress')
     miss = sum(1 for d in domains for r in d['rows'] if r['status'] == 'missing')
-    data = {'domains': domains, 'total': total, 'impl': impl, 'prog': prog, 'miss': miss}
+    skip = sum(1 for d in domains for r in d['rows'] if r['status'] == 'skipped')
+    data = {'domains': domains, 'total': total, 'impl': impl, 'prog': prog,
+            'miss': miss, 'skip': skip}
     payload = json.dumps(data, ensure_ascii=False)
     html = TEMPLATE.replace('__DATA__', payload) \
                    .replace('__DATE__', generated_at) \
                    .replace('__MERGEDNOTE__', merged_note)
-    return html, (total, impl, prog, miss)
+    return html, (total, impl, prog, miss, skip)
 
 
 TEMPLATE = r'''<!DOCTYPE html>
@@ -414,6 +440,7 @@ TEMPLATE = r'''<!DOCTYPE html>
   #f-status .seg-btn.on[data-v="implemented"]{background-color:#0d9488;border-color:#0d9488}
   #f-status .seg-btn.on[data-v="in_progress"]{background-color:#d97706;border-color:#d97706}
   #f-status .seg-btn.on[data-v="missing"]{background-color:#dc2626;border-color:#dc2626}
+  #f-status .seg-btn.on[data-v="skipped"]{background-color:#71717a;border-color:#71717a}
   #f-type .seg-btn.on[data-v="Command"]{background-color:#2563eb;border-color:#2563eb}
   #f-type .seg-btn.on[data-v="Query"]{background-color:#7c3aed;border-color:#7c3aed}
   #f-version .seg-btn.on[data-v="9.0"]{background-color:#059669;border-color:#059669}
@@ -452,11 +479,12 @@ TEMPLATE = r'''<!DOCTYPE html>
 
   <!-- stat cards: endpoints (always visible, outside the tabs) -->
   <h2 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-6 mb-2">Endpoints</h2>
-  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+  <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-total" class="text-2xl font-bold text-gray-900 dark:text-white">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Total</div></div>
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-impl" class="text-2xl font-bold text-teal-600 dark:text-teal-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Implemented</div></div>
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-prog" class="text-2xl font-bold text-amber-500 dark:text-amber-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">In progress</div></div>
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-miss" class="text-2xl font-bold text-red-600 dark:text-red-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Missing</div></div>
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm" title="Endpoints explicitly ruled out by maintainers — excluded from the progress denominator"><div id="c-skip" class="text-2xl font-bold text-zinc-500 dark:text-zinc-400">0</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Skipped</div></div>
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-pct" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Progress</div></div>
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm"><div id="c-proj" class="text-2xl font-bold text-indigo-400 dark:text-indigo-300">0%</div><div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">Projected</div></div>
   </div>
@@ -466,10 +494,12 @@ TEMPLATE = r'''<!DOCTYPE html>
     <div class="flex h-3 rounded-full bg-red-500 overflow-hidden">
       <div id="ov-i" class="bg-teal-500 h-full"></div>
       <div id="ov-p" class="bg-amber-400 h-full"></div>
+      <div id="ov-s" class="bg-zinc-400 dark:bg-zinc-500 h-full" title="Skipped by maintainers"></div>
     </div>
     <div class="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
       <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-teal-500"></span> Implemented</span>
       <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-amber-400"></span> In progress (open PR)</span>
+      <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-zinc-400 dark:bg-zinc-500"></span> Skipped</span>
       <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-red-500"></span> Missing</span>
     </div>
   </div>
@@ -533,7 +563,8 @@ TEMPLATE = r'''<!DOCTYPE html>
             <button data-v="all" class="seg-btn on py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-s-lg">All</button>
             <button data-v="implemented" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Implemented</button>
             <button data-v="in_progress" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">In progress</button>
-            <button data-v="missing" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg">Missing</button>
+            <button data-v="missing" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px">Missing</button>
+            <button data-v="skipped" class="seg-btn py-1.5 px-3 text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 -ms-px last:rounded-e-lg" title="Excluded by maintainers — kept for traceability">Skipped</button>
           </div>
         </div>
 
@@ -619,14 +650,15 @@ TEMPLATE = r'''<!DOCTYPE html>
 <script src="https://cdn.jsdelivr.net/npm/preline@2/dist/preline.min.js"></script>
 <script>
 const DATA = JSON.parse(document.getElementById('data').textContent);
-const SL = {implemented:'Implemented', in_progress:'In progress', missing:'Missing'};
+const SL = {implemented:'Implemented', in_progress:'In progress', missing:'Missing', skipped:'Skipped'};
 const SBADGE = {
   implemented:'bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300',
   in_progress:'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300',
-  missing:'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300'
+  missing:'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300',
+  skipped:'bg-zinc-100 text-zinc-700 dark:bg-zinc-500/15 dark:text-zinc-300'
 };
-const SDOT = {implemented:'✅', in_progress:'🚧', missing:'❌'};
-const SORD = {implemented:0, in_progress:1, missing:2};
+const SDOT = {implemented:'✅', in_progress:'🚧', missing:'❌', skipped:'⊘'};
+const SORD = {implemented:0, in_progress:1, missing:2, skipped:3};
 const VL = {'9.0':'9.0.3+', '9.1':'9.1+', 'dev':'develop', 'na':'n/a'};
 const VBADGE = {
   '9.0':'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
@@ -666,14 +698,15 @@ function buildRow(r){
   const tb = r.type==='Command'?'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300':'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-300';
   const ver = r.version || 'na';
   const vb = '<span class="'+BADGE+' '+VBADGE[ver]+'" title="'+esc(VTITLE[ver])+'">'+VL[ver]+'</span>';
+  const skipTitle = r.skip_reason ? ' title="'+esc((r.skip_by?'@'+r.skip_by+': ':'')+r.skip_reason)+'"' : '';
   return '<tr class="row hover:bg-gray-50 dark:hover:bg-gray-700/40" data-s="'+r.status+'" data-t="'+r.type+'"'+
     ' data-action="'+esc(r.action.toLowerCase())+'" data-ep="'+esc((r.endpoint||'').toLowerCase())+'"'+
     ' data-author="'+esc(author)+'" data-sord="'+SORD[r.status]+'" data-version="'+ver+'"'+
-    ' data-k="'+esc((r.action+' '+(r.endpoint||'')+' '+author).toLowerCase())+'">'+
+    ' data-k="'+esc((r.action+' '+(r.endpoint||'')+' '+author+' '+(r.skip_reason||'')).toLowerCase())+'">'+
     '<td class="py-2.5 px-4 align-top"><code class="'+CODE+'">'+esc(r.action)+'</code></td>'+
     '<td class="py-2.5 px-4 align-top"><span class="'+BADGE+' '+tb+'">'+r.type+'</span></td>'+
     '<td class="py-2.5 px-4 align-top">'+vb+'</td>'+
-    '<td class="py-2.5 px-4 align-top"><span class="'+BADGE+' '+SBADGE[r.status]+'">'+SDOT[r.status]+' '+SL[r.status]+'</span></td>'+
+    '<td class="py-2.5 px-4 align-top"><span class="'+BADGE+' '+SBADGE[r.status]+'"'+skipTitle+'>'+SDOT[r.status]+' '+SL[r.status]+'</span></td>'+
     '<td class="py-2.5 px-4 align-top">'+ep+'</td>'+
     '<td class="py-2.5 px-4 align-top text-sm text-gray-600 dark:text-gray-300">'+(who||'<span class="text-gray-300 dark:text-gray-600">—</span>')+'</td></tr>';
 }
@@ -686,18 +719,19 @@ function render(){
     const i=d.rows.filter(r=>r.status==='implemented').length;
     const p=d.rows.filter(r=>r.status==='in_progress').length;
     const m=d.rows.filter(r=>r.status==='missing').length;
-    const t=d.rows.length, pct=i/t*100, dn=esc(d.name.toLowerCase());
+    const s=d.rows.filter(r=>r.status==='skipped').length;
+    const t=d.rows.length, denom=Math.max(1,t-s), pct=i/denom*100, dn=esc(d.name.toLowerCase());
     d.rows.forEach(r=>{const a=r.author||r.assignee; if(a) authors.add(a);});
-    opts+='<option value="'+dn+'">'+esc(d.name)+' ('+i+'/'+t+')</option>';
+    opts+='<option value="'+dn+'">'+esc(d.name)+' ('+i+'/'+denom+')</option>';
     const rows=d.rows.map(buildRow).join('');
     html+='<div class="domain bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden" data-dn="'+dn+'" data-name="'+dn+'" data-pct="'+pct.toFixed(2)+
-      '" data-total="'+t+'" data-missing="'+m+'" data-prog="'+p+'" data-impl="'+i+'">'+
+      '" data-total="'+t+'" data-missing="'+m+'" data-prog="'+p+'" data-impl="'+i+'" data-skipped="'+s+'">'+
       '<div class="dh flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 select-none" onclick="this.parentNode.classList.toggle(\'col\')">'+
         '<span class="caret text-gray-400 text-xs">▼</span>'+
         '<span class="font-semibold text-gray-900 dark:text-gray-100">'+esc(d.name)+'</span>'+
         '<span class="grow"></span>'+
-        '<div class="hidden sm:flex h-2.5 w-40 rounded-full bg-red-500 overflow-hidden shrink-0"><div class="bg-teal-500 h-full" style="width:'+(i/t*100)+'%"></div><div class="bg-amber-400 h-full" style="width:'+(p/t*100)+'%"></div></div>'+
-        '<span class="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap w-24 text-right">'+i+'/'+t+' · '+Math.round(pct)+'%</span>'+
+        '<div class="hidden sm:flex h-2.5 w-40 rounded-full bg-red-500 overflow-hidden shrink-0" title="'+i+' impl · '+p+' prog · '+s+' skipped · '+m+' missing"><div class="bg-teal-500 h-full" style="width:'+(i/t*100)+'%"></div><div class="bg-amber-400 h-full" style="width:'+(p/t*100)+'%"></div><div class="bg-zinc-400 dark:bg-zinc-500 h-full" style="width:'+(s/t*100)+'%"></div></div>'+
+        '<span class="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap w-24 text-right">'+i+'/'+denom+' · '+Math.round(pct)+'%</span>'+
       '</div>'+
       '<div class="dbody overflow-x-auto border-t border-gray-100 dark:border-gray-700"><table class="w-full text-left">'+
         '<thead class="bg-gray-50 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide sortable">'+
@@ -718,11 +752,13 @@ function render(){
 }
 
 function setStats(){
-  const t=DATA.total,i=DATA.impl,p=DATA.prog,m=DATA.miss, $=id=>document.getElementById(id);
+  const t=DATA.total,i=DATA.impl,p=DATA.prog,m=DATA.miss,s=DATA.skip||0, $=id=>document.getElementById(id);
+  const denom=Math.max(1,t-s);      // % is over actionable rows, skipped excluded
   $('c-total').textContent=t;$('c-impl').textContent=i;$('c-prog').textContent=p;$('c-miss').textContent=m;
-  $('c-pct').textContent=(i/t*100).toFixed(1)+'%';
-  $('c-proj').textContent=((i+p)/t*100).toFixed(1)+'%';
-  $('ov-i').style.width=(i/t*100)+'%'; $('ov-p').style.width=(p/t*100)+'%';
+  $('c-skip').textContent=s;
+  $('c-pct').textContent=(i/denom*100).toFixed(1)+'%';
+  $('c-proj').textContent=((i+p)/denom*100).toFixed(1)+'%';
+  $('ov-i').style.width=(i/t*100)+'%'; $('ov-p').style.width=(p/t*100)+'%'; $('ov-s').style.width=(s/t*100)+'%';
   // domain & contributor KPIs computed from the dataset
   let done=0, empty=0, cmd=0, qry=0; const prs=new Set(), authors=new Set();
   for(const d of DATA.domains){
@@ -900,6 +936,7 @@ def main():
         'amber':  'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
         'indigo': 'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-300',
         'slate':  'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+        'zinc':   'bg-zinc-100 text-zinc-700 dark:bg-zinc-500/15 dark:text-zinc-300',
     }
     ICON = {
         'check':  'm4.5 12.75 6 6 9-13.5',
@@ -907,6 +944,7 @@ def main():
         'search': 'm21 21-4.35-4.35M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z',
         'code':   'M17.25 6.75 22.5 12l-5.25 5.25M6.75 17.25 1.5 12l5.25-5.25M14.25 3.75l-4.5 16.5',
         'minus':  'M15 12H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+        'ban':    'M18.364 18.364A9 9 0 1 1 5.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728A9 9 0 0 0 5.636 5.636',
     }
     def seg(label, hue, icon, body):
         ico = (f'<svg class="size-3 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" '
@@ -942,17 +980,29 @@ def main():
             parts.append(f"{miss_ver[lbl]} {txt}")
     if parts:
         segs.append(seg("Missing", "slate", "minus", "by min version — " + ", ".join(parts) + "."))
+    skipped_rows = [r for d in domains for r in d['rows'] if r['status'] == 'skipped']
+    if skipped_rows:
+        def _one(r):
+            pr = f' (<a class=\"text-blue-600 dark:text-blue-400 hover:underline\" href=\"https://github.com/PrestaShop/ps_apiresources/pull/{r["pr"]}\" target=\"_blank\">#{r["pr"]}</a>)' if r.get('pr') else ''
+            by = f' — per @{r["skip_by"]}' if r.get('skip_by') else ''
+            return f'<code>{r["action"]}</code>{pr}{by}: {r.get("skip_reason", "")}'
+        body = "; ".join(_one(r) for r in skipped_rows)
+        segs.append(seg("Skipped", "zinc", "ban",
+                        f"{len(skipped_rows)} excluded by maintainers — {body}"))
     if not segs:
         segs.append('<div class="text-gray-500 dark:text-gray-400">'
                     'No PR status changes since the source snapshot.</div>')
     note = "".join(segs)
     stamp = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M %Z")
-    html, (total, impl, prog, miss) = build(domains, stamp, note)
+    html, (total, impl, prog, miss, skip) = build(domains, stamp, note)
     with open(OUT, "w") as f:
         f.write(html)
     print(f"[{stamp}] wrote {OUT}")
-    print(f"  domains={len(domains)} total={total} impl={impl} prog={prog} miss={miss} "
-          f"({impl/total*100:.1f}% done, {(impl+prog)/total*100:.1f}% projected)")
+    # % is over the actionable denominator (total minus explicitly skipped rows),
+    # so a maintainer decision to skip an endpoint doesn't inflate or deflate progress.
+    denom = max(1, total - skip)
+    print(f"  domains={len(domains)} total={total} impl={impl} prog={prog} miss={miss} skip={skip} "
+          f"({impl/denom*100:.1f}% done, {(impl+prog)/denom*100:.1f}% projected)")
     vc = {}
     miss_by_ver = {}
     for d in domains:
