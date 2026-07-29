@@ -92,8 +92,6 @@ def parse(body):
                 row['skip_by'] = sk.get('by')
                 if sk.get('pr'):
                     row['pr'] = sk['pr']
-                    row['assignee'] = sk.get('by')
-                    row['author'] = sk.get('by')
             cur['rows'].append(row)
     return domains
 
@@ -122,12 +120,16 @@ def reconcile(domains):
     moved_merged, moved_closed = [], []
     for d in domains:
         for r in d['rows']:
-            if not r['pr'] or r['status'] != 'in_progress':
+            if not r['pr'] or r['status'] not in ('in_progress', 'skipped'):
                 continue
             st, author = info.get(r['pr'], (None, None))
             if author:
                 r['assignee'] = author          # verified real PR creator (overrides issue listing)
                 r['author'] = author            # preserved for the author filter even after a transition
+            if r['status'] == 'skipped':
+                # Skip decision is final — don't let a CLOSED PR flip it to missing,
+                # or a MERGED PR flip it to implemented. Only the author refresh above applies.
+                continue
             if st == 'MERGED':
                 r['status'] = 'implemented'
                 r['merged_pr'] = r['pr']
