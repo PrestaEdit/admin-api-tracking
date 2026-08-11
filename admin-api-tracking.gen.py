@@ -27,7 +27,12 @@ ISSUE = "39630"
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "admin-api-tracking.html")
 
-STATUS_MAP = {'✅ Implemented': 'implemented', '🚧 In Progress': 'in_progress', '❌ Missing': 'missing'}
+STATUS_MAP = {
+    '✅ Implemented': 'implemented', '✅': 'implemented',
+    '🚧 In Progress': 'in_progress', '🚧': 'in_progress',
+    '❌ Missing': 'missing', '❌': 'missing',
+}
+DOMAIN_RE = re.compile(r'^##\s+(?:.*Domain:\s*(.+)|🏷️\s*(.+))\s*$')
 PR_RE = re.compile(r'\[([^\]]+)\]\(https://github.com/([^)]+)\).*?/ps_apiresources/pull/(\d+)')
 
 # Endpoints explicitly ruled out by ps_apiresources maintainers — kept in the tracker
@@ -56,9 +61,13 @@ def fetch_issue_body():
 def parse(body):
     domains, cur, seen = [], None, set()
     for ln in body.splitlines():
-        m = re.match(r'## .*Domain: (.+)', ln)
+        m = DOMAIN_RE.match(ln)
         if m:
-            cur = {'name': m.group(1).strip(), 'rows': []}
+            name = (m.group(1) or m.group(2)).strip()
+            if name.lower().startswith('excluded'):
+                cur = None
+                continue
+            cur = {'name': name, 'rows': []}
             domains.append(cur)
             continue
         if ln.startswith('|') and cur is not None:
@@ -93,7 +102,42 @@ def parse(body):
                 if sk.get('pr'):
                     row['pr'] = sk['pr']
             cur['rows'].append(row)
+    for ex in parse_excluded(body):
+        SKIPPED.setdefault(ex['action'], {'reason': ex['reason'], 'by': None, 'pr': None})
+        dom = next((d for d in domains if d['name'] == ex['domain']), None)
+        if dom is None:
+            dom = {'name': ex['domain'], 'rows': []}
+            domains.append(dom)
+        if any(r['action'] == ex['action'] for r in dom['rows']):
+            continue
+        dom['rows'].append({
+            'action': ex['action'], 'type': ex['type'], 'status': 'skipped',
+            'endpoint': '', 'assignee': None, 'pr': None, 'author': None,
+            'skip_reason': ex['reason'], 'skip_by': None,
+        })
     return domains
+
+
+def parse_excluded(body):
+    lines = body.splitlines()
+    try:
+        start = next(i for i, l in enumerate(lines) if l.startswith('## 🚫 Excluded'))
+    except StopIteration:
+        return []
+    out = []
+    for ln in lines[start + 1:]:
+        if ln.startswith('## ') or ln.startswith('---'):
+            break
+        if not ln.startswith('|'):
+            continue
+        cells = [c.strip() for c in ln.strip().strip('|').split('|')]
+        if len(cells) < 4 or cells[0] == 'Action' or set(cells[0]) <= set('-:'):
+            continue
+        out.append({
+            'action': cells[0].strip('`'), 'type': cells[1],
+            'domain': cells[2], 'reason': cells[3],
+        })
+    return out
 
 
 def pr_info(num):
